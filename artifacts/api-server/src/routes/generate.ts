@@ -110,7 +110,7 @@ async function planWithOpenAI(prompt: string): Promise<Array<{name: string; desc
       { role: "system", content: PLANNER_SYSTEM },
       { role: "user", content: `App idea: ${prompt}` },
     ],
-  });
+  } as any);
   const raw = completion.choices[0]?.message?.content ?? "{}";
   const parsed = JSON.parse(raw.replace(/^```json?\s*/i, "").replace(/\s*```$/i, "").trim());
   return parsed.files ?? [];
@@ -357,11 +357,13 @@ async function runGeneration(
       filesDone: plan.length,
       createdAt: Date.now(),
     });
-  } catch (err) {
-    console.error("Generation task failed:", String(err));
+  } catch (err: any) {
+    const detail = err?.message ?? String(err);
+    const stack = err?.stack ?? "";
+    console.error("Generation task failed:", detail, stack);
     tasks.set(taskId, {
       status: "error",
-      error: "Generation failed. Please try again.",
+      error: `Generation failed: ${detail}`,
       createdAt: Date.now(),
     });
   }

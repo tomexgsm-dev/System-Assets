@@ -10,6 +10,9 @@ const PgStore = connectPgSimple(session);
 
 const app: Express = express();
 
+// Trust Replit's reverse proxy so secure cookies and req.ip work correctly in production
+app.set("trust proxy", 1);
+
 // Register Stripe webhook BEFORE json middleware (needs raw Buffer)
 app.post(
   "/api/stripe/webhook",

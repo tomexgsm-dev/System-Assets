@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import { useLocation } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Sparkles, ExternalLink, Crown, Loader2, Plus, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -14,16 +15,36 @@ export default function Dashboard() {
   const { data: generations, isLoading: gensLoading } = useBuilderGenerations();
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+
     if (params.get("upgraded") === "1") {
-      toast({ title: "Welcome to PRO!", description: "You now have unlimited website generations." });
       window.history.replaceState({}, "", window.location.pathname);
+      // Sync the session plan with the DB (Stripe webhook may have upgraded it)
+      fetch(`${BASE}/api/stripe/verify-upgrade`, {
+        method: "POST",
+        credentials: "include",
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          // Invalidate auth cache so the UI shows PRO plan
+          queryClient.invalidateQueries({ queryKey: ["auth-me"] });
+          if (data.plan === "pro") {
+            toast({ title: "Welcome to PRO!", description: "You now have unlimited website generations." });
+          } else {
+            toast({ title: "Payment received!", description: "Your plan will be upgraded shortly." });
+          }
+        })
+        .catch(() => {
+          toast({ title: "Welcome to PRO!", description: "Your account has been upgraded." });
+        });
     }
+
     if (params.get("canceled") === "1") {
-      toast({ title: "Payment canceled", description: "No charge was made.", variant: "destructive" });
       window.history.replaceState({}, "", window.location.pathname);
+      toast({ title: "Payment canceled", description: "No charge was made.", variant: "destructive" });
     }
   }, []);
 

@@ -34,6 +34,7 @@ router.get("/stripe/products", async (_req, res) => {
           id: row.price_id,
           unit_amount: row.unit_amount,
           currency: row.currency,
+          recurring: row.recurring,
         });
       }
     }
@@ -84,15 +85,26 @@ router.post("/stripe/checkout", requireAuth, async (req: any, res) => {
   }
 });
 
-// Stripe webhook: update user plan on successful payment
-router.post("/stripe/success-webhook", requireAuth, async (req: any, res) => {
+// POST /api/stripe/verify-upgrade — called by the dashboard after ?upgraded=1 redirect.
+// Re-reads the user plan from DB and refreshes the session so the UI reflects the upgrade.
+router.post("/stripe/verify-upgrade", requireAuth, async (req: any, res) => {
   try {
-    await storage.updateUserStripeInfo(req.session.userId, { plan: "pro" });
-    req.session.plan = "pro";
-    res.json({ ok: true });
+    const user = await storage.getUser(req.session.userId);
+    if (!user) {
+      res.status(401).json({ error: "User not found" });
+      return;
+    }
+
+    // Sync session plan with DB plan (webhook may have already upgraded it)
+    req.session.plan = user.plan;
+    await new Promise<void>((resolve, reject) =>
+      req.session.save((err: any) => (err ? reject(err) : resolve()))
+    );
+
+    res.json({ plan: user.plan, email: user.email });
   } catch (err) {
-    console.error("Success webhook error:", String(err));
-    res.status(500).json({ error: "Failed to update plan" });
+    console.error("Verify upgrade error:", String(err));
+    res.status(500).json({ error: "Failed to verify upgrade" });
   }
 });
 

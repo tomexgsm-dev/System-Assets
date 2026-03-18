@@ -150,6 +150,53 @@ function ensureFullHtml(html: string): string {
   return h;
 }
 
+// Inline local CSS/JS files referenced in HTML so srcDoc iframes work without
+// a real web server.  External CDN URLs (http/https) are left untouched.
+function inlineAssetsIntoHtml(html: string, files: ProjectFile[]): string {
+  const byName = new Map(files.map((f) => [f.name, f.content]));
+
+  // Replace <link rel="stylesheet" href="local.css"> with <style>...</style>
+  let result = html.replace(
+    /<link[^>]+rel=["']stylesheet["'][^>]+href=["']([^"']+)["'][^>]*\/?>/gi,
+    (match, href) => {
+      if (href.startsWith("http://") || href.startsWith("https://") || href.startsWith("//")) {
+        return match;
+      }
+      const fileName = href.split("/").pop() ?? href;
+      const css = byName.get(fileName) ?? byName.get(href);
+      return css ? `<style>\n${css}\n</style>` : match;
+    }
+  );
+
+  // Also handle the reversed-attribute form: href first, then rel
+  result = result.replace(
+    /<link[^>]+href=["']([^"']+)["'][^>]+rel=["']stylesheet["'][^>]*\/?>/gi,
+    (match, href) => {
+      if (href.startsWith("http://") || href.startsWith("https://") || href.startsWith("//")) {
+        return match;
+      }
+      const fileName = href.split("/").pop() ?? href;
+      const css = byName.get(fileName) ?? byName.get(href);
+      return css ? `<style>\n${css}\n</style>` : match;
+    }
+  );
+
+  // Replace <script src="local.js"></script> with inline <script>...</script>
+  result = result.replace(
+    /<script[^>]+src=["']([^"']+)["'][^>]*><\/script>/gi,
+    (match, src) => {
+      if (src.startsWith("http://") || src.startsWith("https://") || src.startsWith("//")) {
+        return match;
+      }
+      const fileName = src.split("/").pop() ?? src;
+      const js = byName.get(fileName) ?? byName.get(src);
+      return js ? `<script>\n${js}\n</script>` : match;
+    }
+  );
+
+  return result;
+}
+
 // ─── Main generation pipeline ─────────────────────────────────────────────────
 async function runGeneration(
   taskId: string,
@@ -194,9 +241,12 @@ async function runGeneration(
       });
     }
 
-    // Step 3: Extract preview HTML (first .html file)
+    // Step 3: Build self-contained preview HTML by inlining all project CSS/JS.
+    // The preview uses srcDoc which has no base URL, so external file references
+    // like <link href="styles.css"> would silently fail without this step.
     const htmlFile = generatedFiles.find((f) => f.name.endsWith(".html"));
-    const previewHtml = ensureFullHtml(htmlFile?.content ?? "<html><body><p>No HTML file generated</p></body></html>");
+    const rawHtml = ensureFullHtml(htmlFile?.content ?? "<html><body><p>No HTML file generated</p></body></html>");
+    const previewHtml = inlineAssetsIntoHtml(rawHtml, generatedFiles);
 
     // Step 4: Save to DB
     const [generation] = await db

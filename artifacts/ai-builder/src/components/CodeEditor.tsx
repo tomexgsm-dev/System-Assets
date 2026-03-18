@@ -5,6 +5,42 @@ import { useToast } from "@/hooks/use-toast";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
+// Inline local CSS/JS files into HTML so the srcDoc iframe preview works
+// without a real server. CDN (http/https/://) links are left as-is.
+function inlineAssets(html: string, files: EditorFile[]): string {
+  const byName = new Map(files.map((f) => [f.name, f.content]));
+  const isExternal = (u: string) =>
+    u.startsWith("http://") || u.startsWith("https://") || u.startsWith("//");
+
+  let result = html
+    .replace(
+      /<link[^>]+rel=["']stylesheet["'][^>]+href=["']([^"']+)["'][^>]*\/?>/gi,
+      (match, href) => {
+        if (isExternal(href)) return match;
+        const css = byName.get(href.split("/").pop() ?? href) ?? byName.get(href);
+        return css ? `<style>\n${css}\n</style>` : match;
+      }
+    )
+    .replace(
+      /<link[^>]+href=["']([^"']+)["'][^>]+rel=["']stylesheet["'][^>]*\/?>/gi,
+      (match, href) => {
+        if (isExternal(href)) return match;
+        const css = byName.get(href.split("/").pop() ?? href) ?? byName.get(href);
+        return css ? `<style>\n${css}\n</style>` : match;
+      }
+    )
+    .replace(
+      /<script[^>]+src=["']([^"']+)["'][^>]*><\/script>/gi,
+      (match, src) => {
+        if (isExternal(src)) return match;
+        const js = byName.get(src.split("/").pop() ?? src) ?? byName.get(src);
+        return js ? `<script>\n${js}\n</script>` : match;
+      }
+    );
+
+  return result;
+}
+
 export interface EditorFile {
   name: string;
   content: string;
@@ -132,7 +168,7 @@ export function CodeEditor({ projectId, initialFiles, onPreviewUpdate }: CodeEdi
     setIsRunning(true);
     const htmlFile = files.find((f) => f.name === "index.html");
     if (htmlFile) {
-      onPreviewUpdate(htmlFile.content);
+      onPreviewUpdate(inlineAssets(htmlFile.content, files));
       toast({ title: "Preview updated!", description: "Live preview refreshed with latest code." });
     }
     setTimeout(() => setIsRunning(false), 600);

@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { Sidebar } from "@/components/Sidebar";
 import { PromptSection } from "@/components/PromptSection";
 import { BrowserPreview } from "@/components/BrowserPreview";
-import { useBuilderGenerate, type GenerationResult } from "@/hooks/use-builder";
+import { useBuilderGenerate, useBuilderGenerations, type GenerationResult } from "@/hooks/use-builder";
 import { useAuth } from "@/hooks/use-auth";
 
 type Model = "openai" | "claude";
@@ -14,10 +14,12 @@ export default function Home() {
   const [currentPrompt, setCurrentPrompt] = useState<string>("");
   const [currentFiles, setCurrentFiles] = useState<GenerationResult["files"]>(null);
   const [limitError, setLimitError] = useState(false);
+  const autoLoadedRef = useRef(false);
 
   const { isLoading: authLoading, isAuthenticated } = useAuth();
   const { mutate: generateWebsite, isPending, progress, resetProgress } = useBuilderGenerate();
-  const [, navigate] = useLocation();
+  const { data: generations } = useBuilderGenerations();
+  const [location, navigate] = useLocation();
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -25,7 +27,35 @@ export default function Home() {
     }
   }, [authLoading, isAuthenticated, navigate]);
 
+  // Auto-load the most recent project OR the ?project=ID from URL
+  useEffect(() => {
+    if (autoLoadedRef.current || !generations || generations.length === 0 || isPending) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const projectIdParam = params.get("project");
+
+    let target = projectIdParam
+      ? generations.find((g) => g.id === Number(projectIdParam))
+      : generations[0];
+
+    if (!target) target = generations[0];
+
+    if (target) {
+      autoLoadedRef.current = true;
+      setCurrentId(target.id);
+      setCurrentHtml((target as any).html ?? null);
+      setCurrentPrompt(target.prompt);
+      setCurrentFiles((target as any).files ?? null);
+
+      // Clean up ?project= from URL without reloading
+      if (projectIdParam) {
+        window.history.replaceState({}, "", window.location.pathname);
+      }
+    }
+  }, [generations, isPending]);
+
   const handleSelectHistory = (gen: any) => {
+    autoLoadedRef.current = true;
     setCurrentId(gen.id);
     setCurrentHtml(gen.html);
     setCurrentPrompt(gen.prompt);
@@ -34,6 +64,7 @@ export default function Home() {
   };
 
   const handleGenerate = (prompt: string, model: Model) => {
+    autoLoadedRef.current = true;
     setCurrentId(undefined);
     setCurrentHtml(null);
     setCurrentPrompt(prompt);

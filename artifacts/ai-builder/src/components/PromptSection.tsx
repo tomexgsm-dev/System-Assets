@@ -35,7 +35,7 @@ export function PromptSection({ onSubmit, isLoading, currentPrompt }: PromptSect
   return (
     <div className="w-full max-w-4xl mx-auto px-6 py-8 relative z-20">
       <div className="mb-4 text-center">
-        <h2 className="text-3xl font-display font-bold text-white mb-2">What will you build today?</h2>
+        <h2 className="text-3xl font-display font-bold text-foreground mb-2">What will you build today?</h2>
         <p className="text-muted-foreground">Describe the website you want, and our AI will generate the layout instantly.</p>
       </div>
 

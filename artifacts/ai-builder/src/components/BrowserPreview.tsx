@@ -1,6 +1,6 @@
 import React, { useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Copy, Check, LayoutTemplate, Maximize2, Monitor } from "lucide-react";
+import { Copy, Check, LayoutTemplate, Monitor, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface BrowserPreviewProps {
@@ -24,7 +24,7 @@ export function BrowserPreview({ html, isLoading }: BrowserPreviewProps) {
   return (
     <div className="flex-1 w-full max-w-[1400px] mx-auto px-6 pb-6 flex flex-col relative z-20">
       <div className="flex items-center justify-between mb-3 px-1">
-        <h3 className="font-display font-semibold text-lg flex items-center gap-2 text-white">
+        <h3 className="font-display font-semibold text-lg flex items-center gap-2 text-foreground">
           <Monitor className="w-5 h-5 text-primary" />
           Live Preview
         </h3>

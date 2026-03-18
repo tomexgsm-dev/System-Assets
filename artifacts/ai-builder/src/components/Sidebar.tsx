@@ -18,7 +18,7 @@ export function Sidebar({ onSelectGeneration, activeId }: SidebarProps) {
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-glow">
           <Sparkles className="w-5 h-5 text-white" />
         </div>
-        <h1 className="font-display font-bold text-xl bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">
+        <h1 className="font-display font-bold text-xl text-foreground">
           Nexus Builder
         </h1>
       </div>

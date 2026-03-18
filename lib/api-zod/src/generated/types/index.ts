@@ -7,6 +7,7 @@
  */
 
 export * from "./generateWebsiteBody";
+export * from "./generateWebsiteBodyModel";
 export * from "./generateWebsiteResponse";
 export * from "./generation";
 export * from "./healthStatus";

@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { openai } from "@workspace/integrations-openai-ai-server";
+import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { db, generationsTable } from "@workspace/db";
 import { desc } from "drizzle-orm";
 import {
@@ -10,6 +11,63 @@ import {
 
 const router: IRouter = Router();
 
+const SYSTEM_PROMPT = `You are an expert web developer. Generate a complete, beautiful, modern HTML landing page based on the user's description.
+
+Requirements:
+- Return ONLY raw HTML (no markdown, no code fences, no explanation)
+- Use Tailwind CSS via CDN: <script src="https://cdn.tailwindcss.com"></script>
+- Make it visually stunning with modern design: gradients, shadows, smooth animations
+- Include sections: hero, features, pricing, and a CTA
+- Use a professional dark theme by default unless specified otherwise
+- Make it fully responsive and mobile-friendly
+- Include realistic placeholder content that matches the description
+- Add subtle CSS animations and hover effects
+- The page should look like a real, polished startup landing page`;
+
+async function generateWithOpenAI(prompt: string): Promise<string> {
+  const completion = await openai.chat.completions.create({
+    model: "gpt-5.2",
+    max_completion_tokens: 8192,
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      {
+        role: "user",
+        content: `Create a beautiful landing page for: ${prompt}`,
+      },
+    ],
+  });
+  return completion.choices[0]?.message?.content ?? "";
+}
+
+async function generateWithClaude(prompt: string): Promise<string> {
+  const message = await anthropic.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 8192,
+    system: SYSTEM_PROMPT,
+    messages: [
+      {
+        role: "user",
+        content: `Create a beautiful landing page for: ${prompt}`,
+      },
+    ],
+  });
+  const block = message.content[0];
+  return block.type === "text" ? block.text : "";
+}
+
+function cleanHtml(raw: string): string {
+  let html = raw
+    .replace(/^```html\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
+  if (!html.toLowerCase().includes("<html")) {
+    html = `<!DOCTYPE html><html><body>${html}</body></html>`;
+  }
+  return html;
+}
+
 router.post("/generate", async (req, res) => {
   const parsed = GenerateWebsiteBody.safeParse(req.body);
   if (!parsed.success) {
@@ -17,45 +75,15 @@ router.post("/generate", async (req, res) => {
     return;
   }
 
-  const { prompt } = parsed.data;
+  const { prompt, model = "openai" } = parsed.data;
 
   try {
-    const systemPrompt = `You are an expert web developer. Generate a complete, beautiful, self-contained HTML page based on the user's description. 
+    const raw =
+      model === "claude"
+        ? await generateWithClaude(prompt)
+        : await generateWithOpenAI(prompt);
 
-Requirements:
-- Return ONLY raw HTML (no markdown, no code fences, no explanation)
-- Include all CSS inline in a <style> tag
-- Include any JavaScript inline in a <script> tag
-- Make it visually stunning with modern design: gradients, shadows, animations
-- Use a dark theme by default
-- Make it responsive and mobile-friendly
-- Include placeholder content that matches the description
-- The page should look like a real, polished website
-- Do NOT include any external dependencies or CDN links — everything must be self-contained`;
-
-    const completion = await openai.chat.completions.create({
-      model: "gpt-5.2",
-      max_completion_tokens: 8192,
-      messages: [
-        { role: "system", content: systemPrompt },
-        {
-          role: "user",
-          content: `Create a beautiful website for: ${prompt}`,
-        },
-      ],
-    });
-
-    let html = completion.choices[0]?.message?.content ?? "";
-
-    html = html
-      .replace(/^```html\s*/i, "")
-      .replace(/^```\s*/i, "")
-      .replace(/\s*```$/i, "")
-      .trim();
-
-    if (!html.toLowerCase().includes("<html")) {
-      html = `<!DOCTYPE html><html><body>${html}</body></html>`;
-    }
+    const html = cleanHtml(raw);
 
     const [generation] = await db
       .insert(generationsTable)

@@ -5,8 +5,11 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { GenerateWebsiteBodyModel } from "./generateWebsiteBodyModel";
 
 export interface GenerateWebsiteBody {
   /** Description of the website to generate */
   prompt: string;
+  /** AI model to use for generation */
+  model?: GenerateWebsiteBodyModel;
 }

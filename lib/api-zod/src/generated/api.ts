@@ -20,6 +20,10 @@ export const HealthCheckResponse = zod.object({
  */
 export const GenerateWebsiteBody = zod.object({
   prompt: zod.string().describe("Description of the website to generate"),
+  model: zod
+    .enum(["openai", "claude"])
+    .optional()
+    .describe("AI model to use for generation"),
 });
 
 export const GenerateWebsiteResponse = zod.object({

@@ -73,6 +73,10 @@ components:
         prompt:
           type: string
           description: Description of the website to generate
+        model:
+          type: string
+          enum: ["openai", "claude"]
+          description: AI model to use for generation
       required:
         - prompt
     GenerateWebsiteResponse:

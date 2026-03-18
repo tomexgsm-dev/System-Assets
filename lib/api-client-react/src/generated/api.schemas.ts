@@ -9,9 +9,22 @@ export interface HealthStatus {
   status: string;
 }
 
+/**
+ * AI model to use for generation
+ */
+export type GenerateWebsiteBodyModel =
+  (typeof GenerateWebsiteBodyModel)[keyof typeof GenerateWebsiteBodyModel];
+
+export const GenerateWebsiteBodyModel = {
+  openai: "openai",
+  claude: "claude",
+} as const;
+
 export interface GenerateWebsiteBody {
   /** Description of the website to generate */
   prompt: string;
+  /** AI model to use for generation */
+  model?: GenerateWebsiteBodyModel;
 }
 
 export interface GenerateWebsiteResponse {

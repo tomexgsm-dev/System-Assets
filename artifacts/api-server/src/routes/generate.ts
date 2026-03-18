@@ -404,6 +404,59 @@ router.get("/generations", async (req: any, res: Response) => {
   }
 });
 
+// ─── PATCH /project/:id — save edited file(s) ────────────────────────────────
+router.patch("/project/:id", async (req: any, res: Response) => {
+  if (!req.session?.userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid project ID" });
+    return;
+  }
+
+  const { fileName, content } = req.body as { fileName: string; content: string };
+  if (!fileName || typeof content !== "string") {
+    res.status(400).json({ error: "fileName and content are required" });
+    return;
+  }
+
+  const [generation] = await db
+    .select()
+    .from(generationsTable)
+    .where(eq(generationsTable.id, id));
+
+  if (!generation || generation.userId !== req.session.userId) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+
+  const currentFiles: ProjectFile[] = (generation.files as ProjectFile[]) ?? [
+    { name: "index.html", content: generation.html },
+  ];
+
+  const updatedFiles = currentFiles.map((f) =>
+    f.name === fileName ? { ...f, content } : f
+  );
+
+  // If fileName not found, add it as a new file
+  if (!currentFiles.find((f) => f.name === fileName)) {
+    updatedFiles.push({ name: fileName, content });
+  }
+
+  // Update preview HTML if index.html was changed
+  const newHtml = fileName === "index.html" ? content : generation.html;
+
+  await db
+    .update(generationsTable)
+    .set({ files: updatedFiles, html: newHtml })
+    .where(eq(generationsTable.id, id));
+
+  res.json({ ok: true, savedAt: new Date().toISOString() });
+});
+
 // ─── GET /project/:id — serve raw HTML ────────────────────────────────────────
 router.get("/project/:id", async (req: Request, res: Response) => {
   const id = parseInt(req.params.id, 10);

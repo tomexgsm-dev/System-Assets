@@ -87,6 +87,7 @@ export default function Home() {
           currentId={currentId}
           progress={progress}
           currentFiles={currentFiles}
+          onHtmlChange={setCurrentHtml}
         />
       </main>
     </div>

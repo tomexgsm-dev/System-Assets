@@ -1,0 +1,97 @@
+🔥 KROK 1 — RUN + ZBIERANIE BŁĘDÓW
+📁 runner.py
+import subprocess
+
+def run_code(path):
+    try:
+        result = subprocess.run(
+            ["python", f"{path}/server.py"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        if result.returncode != 0:
+            return False, result.stderr
+
+        return True, result.stdout
+
+    except Exception as e:
+        return False, str(e)
+🔥 KROK 2 — AI DEBUGGER
+📁 debugger.py
+import openai
+
+def fix_code(files, error):
+    system = f"""
+    You are a senior Python developer.
+
+    Fix the code based on error:
+
+    ERROR:
+    {error}
+
+    FILES:
+    {files}
+
+    Return fixed files as JSON:
+    {{
+      "server.py": "...",
+      "index.html": "..."
+    }}
+    """
+
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[{"role": "system", "content": system}]
+    )
+
+    return response["choices"][0]["message"]["content"]
+🔥 KROK 3 — AUTO FIX LOOP
+📁 autopilot.py
+import json
+import os
+
+from runner import run_code
+from debugger import fix_code
+
+
+def load_files(path):
+    files = {}
+    for f in os.listdir(path):
+        with open(os.path.join(path, f), "r") as file:
+            files[f] = file.read()
+    return files
+
+
+def save_files(path, files):
+    for name, content in files.items():
+        with open(os.path.join(path, name), "w") as f:
+            f.write(content)
+
+
+def autopilot(project_path):
+    for i in range(5):  # max 5 prób
+        success, output = run_code(project_path)
+
+        if success:
+            return "✅ SUCCESS"
+
+        print("❌ ERROR:", output)
+
+        files = load_files(project_path)
+
+        fixed = fix_code(files, output)
+        fixed_files = json.loads(fixed)
+
+        save_files(project_path, fixed_files)
+
+    return "❌ FAILED AFTER 5 FIXES"
+🔥 KROK 4 — API
+@app.route("/autofix", methods=["POST"])
+def autofix():
+    project = request.json["project"]
+
+    result = autopilot(f"generated/{project}")
+
+    return {"result": result}

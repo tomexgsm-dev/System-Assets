@@ -6,9 +6,11 @@ import { rm, readFile } from "fs/promises";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// server deps to bundle to reduce openat(2) syscalls
-// which helps cold start times without risking some
-// packages that are not bundle compatible
+// Server deps to bundle to reduce openat(2) syscalls, which helps cold-start
+// times. Exclude packages that:
+//  - use import.meta.url to locate files on disk at runtime (stripe-replit-sync)
+//  - have native addons (bcrypt)
+// Those must stay external so Node can load them from a real node_modules dir.
 const allowlist = [
   "@google/generative-ai",
   "axios",
@@ -60,8 +62,16 @@ async function buildAll() {
     bundle: true,
     format: "cjs",
     outfile: path.resolve(distDir, "index.cjs"),
+    // Polyfill import.meta.url for bundled ESM packages (openai, stripe, etc.)
+    // that call fileURLToPath(import.meta.url) at module initialisation.
+    // Without this, esbuild transforms import.meta.url to `undefined` in CJS
+    // output, causing an ERR_INVALID_ARG_TYPE crash at startup.
+    banner: {
+      js: 'const __importMetaUrl = require("url").pathToFileURL(__filename).href;',
+    },
     define: {
       "process.env.NODE_ENV": '"production"',
+      "import.meta.url": "__importMetaUrl",
     },
     minify: true,
     external: externals,

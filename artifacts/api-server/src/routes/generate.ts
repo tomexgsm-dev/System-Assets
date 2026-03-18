@@ -115,13 +115,20 @@ async function planWithClaude(prompt: string): Promise<Array<{name: string; desc
 async function generateFileWithOpenAI(fileName: string, description: string, prompt: string): Promise<string> {
   const completion = await openai.chat.completions.create({
     model: "gpt-5.2",
-    max_completion_tokens: 4096,
+    // gpt-5.2 is a reasoning model — reasoning tokens count against this budget.
+    // 4096 was silently exhausted by internal thinking, producing 0-char output.
+    // 16000 gives enough room for both reasoning and actual code.
+    max_completion_tokens: 16000,
     messages: [
       { role: "system", content: FILE_SYSTEM(fileName, description) },
       { role: "user", content: `App idea: ${prompt}\nGenerate: ${fileName}` },
     ],
-  });
-  return completion.choices[0]?.message?.content ?? "";
+  } as any);
+  const choice = completion.choices[0];
+  const content = choice?.message?.content ?? "";
+  console.log(`[OpenAI] ${fileName}: finish_reason=${choice?.finish_reason}, len=${content.length}`);
+  if (!content) console.warn(`[OpenAI] WARNING: empty content for ${fileName}`, JSON.stringify(choice));
+  return content;
 }
 
 async function generateFileWithClaude(fileName: string, description: string, prompt: string): Promise<string> {
@@ -132,7 +139,10 @@ async function generateFileWithClaude(fileName: string, description: string, pro
     messages: [{ role: "user", content: `App idea: ${prompt}\nGenerate: ${fileName}` }],
   });
   const block = message.content[0];
-  return block.type === "text" ? block.text : "";
+  const content = block.type === "text" ? block.text : "";
+  console.log(`[Claude] ${fileName}: stop_reason=${message.stop_reason}, len=${content.length}`);
+  if (!content) console.warn(`[Claude] WARNING: empty content for ${fileName}`, JSON.stringify(message.content));
+  return content;
 }
 
 function stripCodeFences(code: string): string {

@@ -305,13 +305,28 @@ router.post("/generate", generateRateLimit, async (req: any, res: Response) => {
       .limit(1);
 
     if (existing) {
+      const existingFiles = (existing.files as ProjectFile[]) ?? [];
+      // Re-inline assets every time we serve from cache so older generations
+      // (saved before inlining was added) also render correctly in the preview.
+      const inlinedHtml = existingFiles.length
+        ? inlineAssetsIntoHtml(existing.html, existingFiles)
+        : existing.html;
+
+      // Patch the DB row if the HTML changed (backfill for old generations).
+      if (inlinedHtml !== existing.html) {
+        db.update(generationsTable)
+          .set({ html: inlinedHtml })
+          .where(eq(generationsTable.id, existing.id))
+          .catch((e: unknown) => console.error("Failed to backfill html:", e));
+      }
+
       const taskId = randomUUID();
       tasks.set(taskId, {
         status: "done",
         generationId: existing.id,
-        html: existing.html,
+        html: inlinedHtml,
         prompt: existing.prompt,
-        files: (existing.files as ProjectFile[]) ?? undefined,
+        files: existingFiles.length ? existingFiles : undefined,
         createdAt: Date.now(),
       });
       res.json({ taskId, cached: true });

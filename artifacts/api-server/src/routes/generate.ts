@@ -1,8 +1,10 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
+import { rateLimit } from "express-rate-limit";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { db, generationsTable, usersTable } from "@workspace/db";
-import { desc, eq, count } from "drizzle-orm";
+import { desc, eq, count, and } from "drizzle-orm";
+import { randomUUID } from "crypto";
 import {
   GenerateWebsiteBody,
   GenerateWebsiteResponse,
@@ -12,6 +14,37 @@ const router: IRouter = Router();
 
 const FREE_PLAN_LIMIT = 3;
 
+// ─── Rate limiting: 10 generations per minute per user ───────────────────────
+const generateRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 10,
+  keyGenerator: (req: any) => String(req.session?.userId ?? req.ip),
+  message: { error: "rate_limit", message: "Too many requests — please wait a minute." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// ─── In-memory task queue ─────────────────────────────────────────────────────
+interface Task {
+  status: "pending" | "done" | "error";
+  generationId?: number;
+  html?: string;
+  prompt?: string;
+  error?: string;
+  createdAt: number;
+}
+
+const tasks = new Map<string, Task>();
+
+// Clean up tasks older than 1 hour
+setInterval(() => {
+  const cutoff = Date.now() - 60 * 60 * 1000;
+  for (const [id, task] of tasks) {
+    if (task.createdAt < cutoff) tasks.delete(id);
+  }
+}, 15 * 60 * 1000);
+
+// ─── AI generation helpers ────────────────────────────────────────────────────
 const SYSTEM_PROMPT = `You are an expert web developer. Generate a complete, beautiful, modern HTML landing page based on the user's description.
 
 Requirements:
@@ -60,7 +93,44 @@ function cleanHtml(raw: string): string {
   return html;
 }
 
-router.post("/generate", async (req, res) => {
+// ─── Background generation worker ────────────────────────────────────────────
+async function runGeneration(
+  taskId: string,
+  userId: number,
+  prompt: string,
+  model: "openai" | "claude"
+) {
+  try {
+    const raw = model === "claude"
+      ? await generateWithClaude(prompt)
+      : await generateWithOpenAI(prompt);
+
+    const html = cleanHtml(raw);
+
+    const [generation] = await db
+      .insert(generationsTable)
+      .values({ prompt, html, userId })
+      .returning();
+
+    tasks.set(taskId, {
+      status: "done",
+      generationId: generation.id,
+      html: generation.html,
+      prompt: generation.prompt,
+      createdAt: Date.now(),
+    });
+  } catch (err) {
+    console.error("Generation task failed:", String(err));
+    tasks.set(taskId, {
+      status: "error",
+      error: "Generation failed. Please try again.",
+      createdAt: Date.now(),
+    });
+  }
+}
+
+// ─── POST /generate — starts async task ──────────────────────────────────────
+router.post("/generate", generateRateLimit, async (req: any, res: Response) => {
   if (!req.session?.userId) {
     res.status(401).json({ error: "Login required to generate websites" });
     return;
@@ -76,7 +146,34 @@ router.post("/generate", async (req, res) => {
   const userId = req.session.userId;
   const plan = req.session.plan ?? "free";
 
-  // Enforce free plan limit
+  // ── Prompt cache: return existing generation for same prompt+model ──────────
+  if (plan === "free") {
+    const [existing] = await db
+      .select()
+      .from(generationsTable)
+      .where(
+        and(
+          eq(generationsTable.userId, userId),
+          eq(generationsTable.prompt, prompt)
+        )
+      )
+      .limit(1);
+
+    if (existing) {
+      const taskId = randomUUID();
+      tasks.set(taskId, {
+        status: "done",
+        generationId: existing.id,
+        html: existing.html,
+        prompt: existing.prompt,
+        createdAt: Date.now(),
+      });
+      res.json({ taskId, cached: true });
+      return;
+    }
+  }
+
+  // ── Free plan limit check ──────────────────────────────────────────────────
   if (plan === "free") {
     const [{ value }] = await db
       .select({ value: count() })
@@ -92,33 +189,45 @@ router.post("/generate", async (req, res) => {
     }
   }
 
-  try {
-    const raw =
-      model === "claude"
-        ? await generateWithClaude(prompt)
-        : await generateWithOpenAI(prompt);
+  // ── Create task and start background generation ────────────────────────────
+  const taskId = randomUUID();
+  tasks.set(taskId, { status: "pending", createdAt: Date.now() });
 
-    const html = cleanHtml(raw);
+  // Fire-and-forget background generation
+  runGeneration(taskId, userId, prompt, model);
 
-    const [generation] = await db
-      .insert(generationsTable)
-      .values({ prompt, html, userId })
-      .returning();
+  res.json({ taskId, cached: false });
+});
 
-    const response = GenerateWebsiteResponse.parse({
-      id: generation.id,
-      html: generation.html,
-      prompt: generation.prompt,
+// ─── GET /status/:taskId — poll for task result ───────────────────────────────
+router.get("/status/:taskId", (req: any, res: Response) => {
+  if (!req.session?.userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+
+  const task = tasks.get(req.params.taskId);
+  if (!task) {
+    res.status(404).json({ error: "Task not found" });
+    return;
+  }
+
+  if (task.status === "done") {
+    res.json({
+      status: "done",
+      id: task.generationId,
+      html: task.html,
+      prompt: task.prompt,
     });
-
-    res.json(response);
-  } catch (err) {
-    console.error("Generation error:", String(err));
-    res.status(500).json({ error: "Failed to generate website" });
+  } else if (task.status === "error") {
+    res.json({ status: "error", error: task.error });
+  } else {
+    res.json({ status: "pending" });
   }
 });
 
-router.get("/generations", async (req, res) => {
+// ─── GET /generations — list user's generations ───────────────────────────────
+router.get("/generations", async (req: any, res: Response) => {
   if (!req.session?.userId) {
     res.status(401).json({ error: "Not authenticated" });
     return;
@@ -146,7 +255,8 @@ router.get("/generations", async (req, res) => {
   }
 });
 
-router.get("/project/:id", async (req, res) => {
+// ─── GET /project/:id — serve raw HTML ────────────────────────────────────────
+router.get("/project/:id", async (req: Request, res: Response) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
     res.status(400).send("<html><body>Invalid project ID</body></html>");

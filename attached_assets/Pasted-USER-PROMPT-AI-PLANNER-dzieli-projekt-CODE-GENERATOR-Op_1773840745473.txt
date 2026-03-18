@@ -1,0 +1,122 @@
+USER PROMPT
+   ↓
+AI PLANNER  ← (dzieli projekt)
+   ↓
+CODE GENERATOR (OpenAI / Claude)
+   ↓
+FILE BUILDER
+   ↓
+ZIP / DEPLOY
+🔥 KROK 1 — AI PLANNER (najważniejsze)
+
+📁 planner.py
+
+import openai
+
+def plan_app(prompt):
+    system = """
+    You are a senior software architect.
+    Break the app into files.
+
+    Return JSON like:
+    {
+      "files": [
+        {"name": "index.html", "description": "..."},
+        {"name": "server.py", "description": "..."}
+      ]
+    }
+    """
+
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": prompt}
+        ]
+    )
+
+    return response["choices"][0]["message"]["content"]
+🔥 KROK 2 — GENERATOR PLIKÓW
+
+📁 builder.py
+
+import openai
+
+def generate_file(file_name, description, prompt):
+    system = f"""
+    You are a senior developer.
+    Generate full code for file: {file_name}
+
+    App idea: {prompt}
+    File purpose: {description}
+
+    Return ONLY code.
+    """
+
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[
+            {"role": "system", "content": system}
+        ]
+    )
+
+    return response["choices"][0]["message"]["content"]
+🔥 KROK 3 — SKŁADANIE PROJEKTU
+
+📁 app_builder.py
+
+import json
+import os
+import uuid
+
+from planner import plan_app
+from builder import generate_file
+
+def build_app(prompt):
+    plan = plan_app(prompt)
+    data = json.loads(plan)
+
+    project_id = str(uuid.uuid4())
+    folder = f"generated/{project_id}"
+    os.makedirs(folder, exist_ok=True)
+
+    for f in data["files"]:
+        code = generate_file(f["name"], f["description"], prompt)
+
+        with open(os.path.join(folder, f["name"]), "w", encoding="utf-8") as file:
+            file.write(code)
+
+    return project_id
+🔥 KROK 4 — API (podpięcie do Twojej appki)
+
+📁 server.py
+
+from flask import Flask, request, jsonify
+from app_builder import build_app
+
+app = Flask(__name__)
+
+@app.route("/build-app", methods=["POST"])
+def build():
+    prompt = request.json["prompt"]
+
+    project_id = build_app(prompt)
+
+    return {
+        "project_id": project_id,
+        "download": f"/download/{project_id}"
+    }
+
+if __name__ == "__main__":
+    app.run()
+🔥 KROK 5 — POBIERANIE ZIP
+import shutil
+
+@app.route("/download/<project_id>")
+def download(project_id):
+    folder = f"generated/{project_id}"
+    zip_path = f"{folder}.zip"
+
+    shutil.make_archive(folder, 'zip', folder)
+
+    return send_file(zip_path, as_attachment=True)

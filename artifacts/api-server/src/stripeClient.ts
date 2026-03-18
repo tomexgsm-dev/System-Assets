@@ -1,24 +1,78 @@
-import Stripe from "stripe";
+import Stripe from 'stripe';
 
-// Stripe client using environment variables
-// After connecting the Stripe integration, these are populated automatically
-let stripeInstance: Stripe | null = null;
+let connectionSettings: any;
 
-export async function getUncachableStripeClient(): Promise<Stripe> {
-  const key = process.env.STRIPE_SECRET_KEY;
-  if (!key) {
-    throw new Error("STRIPE_SECRET_KEY is not set. Please connect the Stripe integration.");
+async function getCredentials() {
+  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
+  const xReplitToken = process.env.REPL_IDENTITY
+    ? 'repl ' + process.env.REPL_IDENTITY
+    : process.env.WEB_REPL_RENEWAL
+      ? 'depl ' + process.env.WEB_REPL_RENEWAL
+      : null;
+
+  if (!xReplitToken) {
+    throw new Error('X-Replit-Token not found for repl/depl');
   }
-  return new Stripe(key, { apiVersion: "2025-04-30.basil" });
+
+  const connectorName = 'stripe';
+  const isProduction = process.env.REPLIT_DEPLOYMENT === '1';
+  const targetEnvironment = isProduction ? 'production' : 'development';
+
+  const url = new URL(`https://${hostname}/api/v2/connection`);
+  url.searchParams.set('include_secrets', 'true');
+  url.searchParams.set('connector_names', connectorName);
+  url.searchParams.set('environment', targetEnvironment);
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      'Accept': 'application/json',
+      'X-Replit-Token': xReplitToken,
+    },
+  });
+
+  const data = await response.json();
+  connectionSettings = data.items?.[0];
+
+  if (!connectionSettings || (!connectionSettings.settings.publishable || !connectionSettings.settings.secret)) {
+    throw new Error(`Stripe ${targetEnvironment} connection not found`);
+  }
+
+  return {
+    publishableKey: connectionSettings.settings.publishable,
+    secretKey: connectionSettings.settings.secret,
+  };
 }
 
-// StripeSync integration — populated after Stripe is connected
+// WARNING: Never cache this client. Always call fresh on every request.
+export async function getUncachableStripeClient(): Promise<Stripe> {
+  const { secretKey } = await getCredentials();
+  return new Stripe(secretKey, { apiVersion: '2025-08-27.basil' });
+}
+
+export async function getStripePublishableKey(): Promise<string> {
+  const { publishableKey } = await getCredentials();
+  return publishableKey;
+}
+
+export async function getStripeSecretKey(): Promise<string> {
+  const { secretKey } = await getCredentials();
+  return secretKey;
+}
+
+// StripeSync singleton for webhook processing and data sync
+let stripeSync: any = null;
+
 export async function getStripeSync() {
-  const { StripeSync } = await import("stripe-replit-sync");
-  const key = process.env.STRIPE_SECRET_KEY;
-  const dbUrl = process.env.DATABASE_URL;
-  if (!key || !dbUrl) {
-    throw new Error("Stripe not configured. Please connect the Stripe integration.");
+  if (!stripeSync) {
+    const { StripeSync } = await import('stripe-replit-sync');
+    const secretKey = await getStripeSecretKey();
+    stripeSync = new StripeSync({
+      poolConfig: {
+        connectionString: process.env.DATABASE_URL!,
+        max: 2,
+      },
+      stripeSecretKey: secretKey,
+    });
   }
-  return await StripeSync.create({ stripeSecretKey: key, databaseUrl: dbUrl });
+  return stripeSync;
 }

@@ -27,11 +27,13 @@ async function initStripe() {
   }
 }
 
-const rawPort = process.env['PORT'];
-if (!rawPort) throw new Error('PORT environment variable is required');
-const port = Number(rawPort);
-if (Number.isNaN(port) || port <= 0) throw new Error(`Invalid PORT: "${rawPort}"`);
+(async () => {
+  const rawPort = process.env['PORT'];
+  if (!rawPort) throw new Error('PORT environment variable is required');
+  const port = Number(rawPort);
+  if (Number.isNaN(port) || port <= 0) throw new Error(`Invalid PORT: "${rawPort}"`);
 
-await initStripe();
+  await initStripe();
 
-app.listen(port, () => console.log(`Server listening on port ${port}`));
+  app.listen(port, () => console.log(`Server listening on port ${port}`));
+})();

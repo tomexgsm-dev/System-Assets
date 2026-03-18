@@ -8,3 +8,22 @@
 export interface HealthStatus {
   status: string;
 }
+
+export interface GenerateWebsiteBody {
+  /** Description of the website to generate */
+  prompt: string;
+}
+
+export interface GenerateWebsiteResponse {
+  /** The generated HTML for the website */
+  html: string;
+  /** The original prompt used */
+  prompt: string;
+}
+
+export interface Generation {
+  id: number;
+  prompt: string;
+  html: string;
+  createdAt: string;
+}

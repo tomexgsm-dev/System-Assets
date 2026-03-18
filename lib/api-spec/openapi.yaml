@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: generate
+    description: Website generation operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,38 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /generate:
+    post:
+      operationId: generateWebsite
+      tags: [generate]
+      summary: Generate a website from a prompt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateWebsiteBody"
+      responses:
+        "200":
+          description: Generated website HTML
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateWebsiteResponse"
+  /generations:
+    get:
+      operationId: listGenerations
+      tags: [generate]
+      summary: List recent website generations
+      responses:
+        "200":
+          description: List of recent generations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Generation"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +67,40 @@ components:
           type: string
       required:
         - status
-
+    GenerateWebsiteBody:
+      type: object
+      properties:
+        prompt:
+          type: string
+          description: Description of the website to generate
+      required:
+        - prompt
+    GenerateWebsiteResponse:
+      type: object
+      properties:
+        html:
+          type: string
+          description: The generated HTML for the website
+        prompt:
+          type: string
+          description: The original prompt used
+      required:
+        - html
+        - prompt
+    Generation:
+      type: object
+      properties:
+        id:
+          type: integer
+        prompt:
+          type: string
+        html:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - prompt
+        - html
+        - createdAt

@@ -14,3 +14,26 @@ import * as zod from "zod";
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
+
+/**
+ * @summary Generate a website from a prompt
+ */
+export const GenerateWebsiteBody = zod.object({
+  prompt: zod.string().describe("Description of the website to generate"),
+});
+
+export const GenerateWebsiteResponse = zod.object({
+  html: zod.string().describe("The generated HTML for the website"),
+  prompt: zod.string().describe("The original prompt used"),
+});
+
+/**
+ * @summary List recent website generations
+ */
+export const ListGenerationsResponseItem = zod.object({
+  id: zod.number(),
+  prompt: zod.string(),
+  html: zod.string(),
+  createdAt: zod.date(),
+});
+export const ListGenerationsResponse = zod.array(ListGenerationsResponseItem);

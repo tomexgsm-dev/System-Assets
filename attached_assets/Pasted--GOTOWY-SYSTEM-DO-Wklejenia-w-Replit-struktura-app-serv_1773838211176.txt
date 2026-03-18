@@ -1,0 +1,113 @@
+🔥 GOTOWY SYSTEM (DO Wklejenia w Replit)
+📁 struktura
+/app
+  ├── server.py
+  ├── generator.py
+  ├── templates/
+  │     └── index.html
+  └── static/
+        └── app.js
+🧠 BACKEND (AI + generator)
+📁 generator.py
+import random
+
+def generate_website(prompt):
+    # 🔥 proste AI (na start)
+    titles = [
+        "Nowoczesna strona ✨",
+        "Startup landing 🚀",
+        "Twoja oferta online 💼"
+    ]
+
+    title = random.choice(titles)
+
+    html = f"""
+    <html>
+    <head>
+        <title>{title}</title>
+        <style>
+            body {{
+                font-family: Arial;
+                background: #0f172a;
+                color: white;
+                text-align: center;
+                padding: 50px;
+            }}
+            .btn {{
+                background: #22c55e;
+                padding: 15px 30px;
+                border-radius: 10px;
+                color: black;
+                text-decoration: none;
+            }}
+        </style>
+    </head>
+    <body>
+        <h1>{prompt}</h1>
+        <p>{title}</p>
+        <a class="btn">Kup teraz</a>
+    </body>
+    </html>
+    """
+    return html
+📁 server.py
+from flask import Flask, request, jsonify, render_template
+from generator import generate_website
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return render_template("index.html")
+
+@app.route("/generate", methods=["POST"])
+def generate():
+    data = request.json
+    prompt = data.get("prompt")
+
+    html = generate_website(prompt)
+
+    return jsonify({
+        "html": html
+    })
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
+🎨 FRONTEND (panel jak mini Replit)
+📁 templates/index.html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI Builder</title>
+</head>
+<body style="font-family: Arial;">
+
+<h2>🚀 AI Website Builder</h2>
+
+<input id="prompt" placeholder="Opisz stronę..." style="width:300px;">
+<button onclick="generate()">GENERUJ</button>
+
+<h3>Preview:</h3>
+<iframe id="preview" style="width:100%; height:400px;"></iframe>
+
+<script src="/static/app.js"></script>
+
+</body>
+</html>
+📁 static/app.js
+async function generate() {
+    const prompt = document.getElementById("prompt").value;
+
+    const res = await fetch("/generate", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ prompt })
+    });
+
+    const data = await res.json();
+
+    const iframe = document.getElementById("preview");
+    iframe.srcdoc = data.html;
+}

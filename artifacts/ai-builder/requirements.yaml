@@ -1,0 +1,12 @@
+packages:
+  "framer-motion": "For smooth layout transitions and magical generation scanning effects"
+  "date-fns": "For formatting human-readable timestamps in the history sidebar"
+
+images:
+  - path: "artifacts/ai-builder/public/images/mesh-bg.png"
+    description: "A very dark, subtle, futuristic wireframe mesh background with faint cyan and indigo glowing nodes, suitable for a dark mode tool background. Almost entirely black."
+    aspect_ratio: "16:9"
+
+notes:
+  - "The app uses hooks directly from @workspace/api-client-react as specified in the implementation notes"
+  - "Since it is a builder tool, the UI is forced into a dark-mode professional aesthetic"

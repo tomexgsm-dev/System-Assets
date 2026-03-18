@@ -1,3 +1,4 @@
+import { useState, useRef, useCallback } from "react";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import {
   useListGenerations,
@@ -6,6 +7,20 @@ import {
 import { useToast } from "@/hooks/use-toast";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+export interface GenerationProgress {
+  phase: "pending" | "planning" | "building" | "done" | "error";
+  filesDone: number;
+  filesTotal: number;
+}
+
+export interface GenerationResult {
+  id: number;
+  html: string;
+  prompt: string;
+  files: Array<{ name: string; content: string; description?: string }> | null;
+  cached: boolean;
+}
 
 export function useBuilderGenerations() {
   return useListGenerations({
@@ -18,11 +33,11 @@ export function useBuilderGenerations() {
   });
 }
 
-// Polls /api/status/:taskId until done or error
 async function pollTaskStatus(
   taskId: string,
-  signal: AbortSignal
-): Promise<{ id: number; html: string; prompt: string }> {
+  signal: AbortSignal,
+  onProgress: (p: GenerationProgress) => void
+): Promise<GenerationResult & { cached?: boolean }> {
   while (!signal.aborted) {
     const res = await fetch(`${BASE}/api/status/${taskId}`, {
       credentials: "include",
@@ -36,7 +51,13 @@ async function pollTaskStatus(
     if (data.status === "done") return data;
     if (data.status === "error") throw new Error(data.error ?? "Generation failed");
 
-    // Still pending — wait 2 seconds before next poll
+    // Report progress for pending/planning/building
+    onProgress({
+      phase: data.status,
+      filesDone: data.filesDone ?? 0,
+      filesTotal: data.filesTotal ?? 0,
+    });
+
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(resolve, 2000);
       signal.addEventListener("abort", () => {
@@ -52,16 +73,32 @@ export function useBuilderGenerate() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  return useMutation({
+  const [progress, setProgress] = useState<GenerationProgress>({
+    phase: "pending",
+    filesDone: 0,
+    filesTotal: 0,
+  });
+
+  // Use ref so mutationFn closure always gets the latest setter
+  const setProgressRef = useRef(setProgress);
+  setProgressRef.current = setProgress;
+
+  const resetProgress = useCallback(() => {
+    setProgress({ phase: "pending", filesDone: 0, filesTotal: 0 });
+  }, []);
+
+  const mutation = useMutation({
     mutationFn: async ({
       data,
       signal,
     }: {
       data: { prompt: string; model?: "openai" | "claude" };
       signal?: AbortSignal;
-    }) => {
+    }): Promise<GenerationResult> => {
       const abortController = new AbortController();
       const effectiveSignal = signal ?? abortController.signal;
+
+      setProgressRef.current({ phase: "pending", filesDone: 0, filesTotal: 0 });
 
       // Start the async generation task
       const res = await fetch(`${BASE}/api/generate`, {
@@ -83,20 +120,39 @@ export function useBuilderGenerate() {
 
       const { taskId, cached } = startData;
 
+      // If cached, skip polling
+      if (cached) {
+        const statusRes = await fetch(`${BASE}/api/status/${taskId}`, {
+          credentials: "include",
+          signal: effectiveSignal,
+        });
+        const statusData = await statusRes.json();
+        return { ...statusData, cached: true };
+      }
+
       // Poll until the generation is complete
-      const result = await pollTaskStatus(taskId, effectiveSignal);
-      return { ...result, cached };
+      const result = await pollTaskStatus(taskId, effectiveSignal, (p) => {
+        setProgressRef.current(p);
+      });
+
+      return { ...result, cached: false };
     },
     onSuccess: (data) => {
+      setProgress({ phase: "done", filesDone: data.files?.length ?? 1, filesTotal: data.files?.length ?? 1 });
       queryClient.invalidateQueries({ queryKey: getListGenerationsQueryKey() });
+
+      const fileCount = data.files?.length;
       toast({
         title: data.cached ? "Loaded from cache!" : "Website generated!",
         description: data.cached
-          ? "Returned a previously generated version of this prompt."
-          : `Project #${data.id} saved — open at /api/project/${data.id}`,
+          ? "Returned a previously generated version."
+          : fileCount
+          ? `Built ${fileCount} files — download the full project as a ZIP!`
+          : `Project #${data.id} is ready.`,
       });
     },
     onError: (error: any) => {
+      setProgress({ phase: "error", filesDone: 0, filesTotal: 0 });
       const isLimit = error?.data?.error === "limit_reached";
       const isRate = error?.data?.error === "rate_limit";
       if (!isLimit) {
@@ -108,4 +164,6 @@ export function useBuilderGenerate() {
       }
     },
   });
+
+  return { ...mutation, progress, resetProgress };
 }

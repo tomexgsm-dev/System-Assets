@@ -1,0 +1,103 @@
+🔥 KROK 1 — EDYTOR KODU (frontend)
+
+👉 używamy: Monaco Editor (ten sam co VS Code)
+
+📁 templates/editor.html
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://unpkg.com/monaco-editor@latest/min/vs/loader.js"></script>
+</head>
+<body>
+
+<div id="editor" style="height:90vh;"></div>
+
+<button onclick="save()">💾 Save</button>
+<button onclick="run()">🚀 Run</button>
+
+<script>
+require.config({ paths: { vs: 'https://unpkg.com/monaco-editor@latest/min/vs' }});
+
+let editor;
+
+require(['vs/editor/editor.main'], function () {
+  editor = monaco.editor.create(document.getElementById('editor'), {
+    value: '<h1>Hello App</h1>',
+    language: 'html',
+    theme: 'vs-dark'
+  });
+});
+
+function save() {
+  fetch("/save", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ code: editor.getValue() })
+  });
+}
+
+function run() {
+  fetch("/run", { method: "POST" })
+  .then(res => res.json())
+  .then(data => {
+    window.open(data.url, "_blank");
+  });
+}
+</script>
+
+</body>
+</html>
+🔥 KROK 2 — BACKEND (zapisywanie kodu)
+📁 server.py
+import os
+import uuid
+from flask import Flask, request, jsonify, render_template
+
+app = Flask(__name__)
+
+BASE = "projects"
+os.makedirs(BASE, exist_ok=True)
+
+CURRENT_PROJECT = "demo"
+
+
+@app.route("/")
+def home():
+    return render_template("editor.html")
+
+
+@app.route("/save", methods=["POST"])
+def save():
+    code = request.json["code"]
+
+    path = f"{BASE}/{CURRENT_PROJECT}"
+    os.makedirs(path, exist_ok=True)
+
+    with open(f"{path}/index.html", "w") as f:
+        f.write(code)
+
+    return {"status": "saved"}
+🔥 KROK 3 — AUTO DEPLOY (Docker)
+
+👉 każdy projekt = osobny container
+
+📁 Dockerfile.template
+FROM nginx:alpine
+COPY . /usr/share/nginx/html
+📁 uruchamianie kontenera
+import subprocess
+
+@app.route("/run", methods=["POST"])
+def run():
+    project_path = f"projects/{CURRENT_PROJECT}"
+
+    port = str(8000 + int(uuid.uuid4().int % 1000))
+
+    subprocess.run([
+        "docker", "run", "-d",
+        "-p", f"{port}:80",
+        "-v", f"{os.getcwd()}/{project_path}:/usr/share/nginx/html",
+        "nginx:alpine"
+    ])
+
+    return {"url": f"http://localhost:{port}"}

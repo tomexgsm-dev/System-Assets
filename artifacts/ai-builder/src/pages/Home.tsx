@@ -3,9 +3,8 @@ import { useLocation } from "wouter";
 import { Sidebar } from "@/components/Sidebar";
 import { PromptSection } from "@/components/PromptSection";
 import { BrowserPreview } from "@/components/BrowserPreview";
-import { useBuilderGenerate } from "@/hooks/use-builder";
+import { useBuilderGenerate, type GenerationResult } from "@/hooks/use-builder";
 import { useAuth } from "@/hooks/use-auth";
-import type { Generation } from "@workspace/api-client-react/src/generated/api.schemas";
 
 type Model = "openai" | "claude";
 
@@ -13,30 +12,34 @@ export default function Home() {
   const [currentId, setCurrentId] = useState<number | undefined>();
   const [currentHtml, setCurrentHtml] = useState<string | null>(null);
   const [currentPrompt, setCurrentPrompt] = useState<string>("");
+  const [currentFiles, setCurrentFiles] = useState<GenerationResult["files"]>(null);
   const [limitError, setLimitError] = useState(false);
 
-  const { user, isLoading: authLoading, isAuthenticated } = useAuth();
-  const { mutate: generateWebsite, isPending } = useBuilderGenerate();
+  const { isLoading: authLoading, isAuthenticated } = useAuth();
+  const { mutate: generateWebsite, isPending, progress, resetProgress } = useBuilderGenerate();
   const [, navigate] = useLocation();
 
-  // Redirect to login if not authenticated
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       navigate("/login");
     }
   }, [authLoading, isAuthenticated, navigate]);
 
-  const handleSelectHistory = (gen: Generation) => {
+  const handleSelectHistory = (gen: any) => {
     setCurrentId(gen.id);
     setCurrentHtml(gen.html);
     setCurrentPrompt(gen.prompt);
+    setCurrentFiles(gen.files ?? null);
     setLimitError(false);
   };
 
   const handleGenerate = (prompt: string, model: Model) => {
     setCurrentId(undefined);
+    setCurrentHtml(null);
     setCurrentPrompt(prompt);
+    setCurrentFiles(null);
     setLimitError(false);
+    resetProgress();
 
     generateWebsite(
       { data: { prompt, model } },
@@ -45,6 +48,7 @@ export default function Home() {
           setCurrentId(data.id);
           setCurrentHtml(data.html);
           setCurrentPrompt(data.prompt);
+          setCurrentFiles(data.files ?? null);
         },
         onError: (error: any) => {
           if (error?.data?.error === "limit_reached") {
@@ -81,6 +85,8 @@ export default function Home() {
           html={currentHtml}
           isLoading={isPending}
           currentId={currentId}
+          progress={progress}
+          currentFiles={currentFiles}
         />
       </main>
     </div>

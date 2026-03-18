@@ -1,20 +1,34 @@
 import React, { useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Copy, Check, LayoutTemplate, Monitor, Sparkles, ExternalLink } from "lucide-react";
+import { Copy, Check, LayoutTemplate, Monitor, Sparkles, ExternalLink, Download, FileCode2, Layers } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import type { GenerationProgress, GenerationResult } from "@/hooks/use-builder";
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 interface BrowserPreviewProps {
   html: string | null;
   isLoading: boolean;
   currentId?: number;
+  progress: GenerationProgress;
+  currentFiles?: GenerationResult["files"];
 }
 
-export function BrowserPreview({ html, isLoading, currentId }: BrowserPreviewProps) {
+const PHASE_LABELS: Record<string, string> = {
+  pending:  "Starting...",
+  planning: "Planning project structure...",
+  building: "Generating files...",
+  done:     "Done!",
+  error:    "Error",
+};
+
+export function BrowserPreview({ html, isLoading, currentId, progress, currentFiles }: BrowserPreviewProps) {
   const [copied, setCopied] = React.useState(false);
   const { toast } = useToast();
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  const projectUrl = currentId ? `/api/project/${currentId}` : null;
+  const projectUrl = currentId ? `${BASE}/api/project/${currentId}` : null;
+  const zipUrl     = currentId ? `${BASE}/api/project/${currentId}/zip` : null;
 
   const handleCopy = () => {
     if (!html) return;
@@ -28,23 +42,52 @@ export function BrowserPreview({ html, isLoading, currentId }: BrowserPreviewPro
     if (projectUrl) window.open(projectUrl, "_blank");
   };
 
+  const handleDownloadZip = () => {
+    if (!zipUrl) return;
+    const a = document.createElement("a");
+    a.href = zipUrl;
+    a.download = `nexus-project-${currentId}.zip`;
+    a.click();
+    toast({ title: "Downloading ZIP...", description: "All project files bundled and downloading." });
+  };
+
+  // Loading overlay content
+  const phaseLabel   = PHASE_LABELS[progress.phase] ?? "Working...";
+  const showProgress = progress.phase === "building" && progress.filesTotal > 0;
+
   return (
     <div className="flex-1 w-full max-w-[1400px] mx-auto px-6 pb-6 flex flex-col relative z-20">
+      {/* Toolbar */}
       <div className="flex items-center justify-between mb-3 px-1">
         <h3 className="font-display font-semibold text-lg flex items-center gap-2 text-foreground">
           <Monitor className="w-5 h-5 text-primary" />
           Live Preview
+          {currentFiles && currentFiles.length > 0 && !isLoading && (
+            <span className="ml-1 text-xs font-normal text-muted-foreground bg-secondary border border-border/50 rounded-full px-2 py-0.5 flex items-center gap-1">
+              <Layers className="w-3 h-3" />
+              {currentFiles.length} files
+            </span>
+          )}
         </h3>
 
         {html && !isLoading && (
           <div className="flex items-center gap-2">
+            {zipUrl && (
+              <button
+                onClick={handleDownloadZip}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500/10 hover:bg-green-500/20 text-green-600 dark:text-green-400 text-sm font-medium transition-colors border border-green-500/20"
+              >
+                <Download className="w-4 h-4" />
+                Download ZIP
+              </button>
+            )}
             {projectUrl && (
               <button
                 onClick={handleOpenInTab}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-sm font-medium transition-colors border border-primary/20"
               >
                 <ExternalLink className="w-4 h-4" />
-                Open in new tab
+                Open in tab
               </button>
             )}
             <button
@@ -58,8 +101,31 @@ export function BrowserPreview({ html, isLoading, currentId }: BrowserPreviewPro
         )}
       </div>
 
+      {/* File list strip */}
+      <AnimatePresence>
+        {currentFiles && currentFiles.length > 0 && !isLoading && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="flex items-center gap-2 overflow-x-auto pb-2 mb-2 scrollbar-thin"
+          >
+            {currentFiles.map((f) => (
+              <div
+                key={f.name}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/70 border border-border/50 text-xs text-muted-foreground whitespace-nowrap shrink-0 font-mono"
+              >
+                <FileCode2 className="w-3 h-3 text-primary/70" />
+                {f.name}
+              </div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Browser window */}
       <div className="flex-1 w-full bg-[#0a0a0a] rounded-xl border border-border/60 shadow-2xl flex flex-col overflow-hidden relative group">
-        {/* Browser Chrome */}
+        {/* Chrome bar */}
         <div className="h-12 border-b border-border/60 bg-[#121214] flex items-center px-4 shrink-0 relative">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-red-500/80"></div>
@@ -84,7 +150,7 @@ export function BrowserPreview({ html, isLoading, currentId }: BrowserPreviewPro
           </div>
         </div>
 
-        {/* Content Area */}
+        {/* Content area */}
         <div className="flex-1 relative bg-white overflow-hidden">
           <AnimatePresence>
             {isLoading && (
@@ -92,18 +158,66 @@ export function BrowserPreview({ html, isLoading, currentId }: BrowserPreviewPro
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="absolute inset-0 bg-[#0a0a0a]/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center"
+                className="absolute inset-0 bg-[#0a0a0a]/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center gap-4"
               >
-                <div className="relative w-32 h-32 flex items-center justify-center">
+                {/* Spinner */}
+                <div className="relative w-28 h-28 flex items-center justify-center">
                   <div className="absolute inset-0 rounded-full border-t-2 border-primary animate-spin"></div>
                   <div className="absolute inset-2 rounded-full border-r-2 border-accent animate-[spin_2s_linear_infinite_reverse]"></div>
                   <Sparkles className="w-8 h-8 text-primary animate-pulse" />
                 </div>
-                <h4 className="mt-6 text-xl font-display font-semibold text-white animate-pulse">Constructing Layout...</h4>
-                <p className="text-muted-foreground text-sm mt-2 max-w-xs text-center">AI is writing semantic HTML and styling components.</p>
 
-                <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-20">
-                  <div className="w-full h-32 bg-gradient-to-b from-transparent via-primary/50 to-transparent animate-scan"></div>
+                {/* Phase label */}
+                <div className="text-center">
+                  <h4 className="text-xl font-display font-semibold text-white animate-pulse">
+                    {phaseLabel}
+                  </h4>
+                  {showProgress && (
+                    <p className="text-muted-foreground text-sm mt-1">
+                      File {progress.filesDone} of {progress.filesTotal}
+                    </p>
+                  )}
+                </div>
+
+                {/* Progress bar */}
+                {showProgress && (
+                  <div className="w-64 bg-white/10 rounded-full h-1.5 overflow-hidden">
+                    <motion.div
+                      className="h-full bg-primary rounded-full"
+                      initial={{ width: 0 }}
+                      animate={{
+                        width: `${Math.round((progress.filesDone / progress.filesTotal) * 100)}%`,
+                      }}
+                      transition={{ type: "spring", stiffness: 60 }}
+                    />
+                  </div>
+                )}
+
+                {/* Step indicators */}
+                <div className="flex items-center gap-4 mt-2">
+                  {(["planning", "building"] as const).map((step) => (
+                    <div key={step} className={`flex items-center gap-1.5 text-xs transition-colors ${
+                      progress.phase === step
+                        ? "text-primary"
+                        : progress.phase === "building" && step === "planning"
+                        ? "text-green-400"
+                        : "text-white/20"
+                    }`}>
+                      <div className={`w-2 h-2 rounded-full ${
+                        progress.phase === step
+                          ? "bg-primary animate-pulse"
+                          : progress.phase === "building" && step === "planning"
+                          ? "bg-green-400"
+                          : "bg-white/20"
+                      }`} />
+                      {step === "planning" ? "Planning" : "Building"}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Scan animation */}
+                <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-10">
+                  <div className="w-full h-24 bg-gradient-to-b from-transparent via-primary/60 to-transparent animate-scan"></div>
                 </div>
               </motion.div>
             )}
@@ -115,7 +229,7 @@ export function BrowserPreview({ html, isLoading, currentId }: BrowserPreviewPro
                 <LayoutTemplate className="w-10 h-10 text-muted-foreground/50" />
               </div>
               <p className="text-lg font-medium text-foreground mb-2">No Website Generated</p>
-              <p className="text-sm max-w-sm">Use the prompt box above to describe your desired website. We'll generate a fully responsive, styled layout right here.</p>
+              <p className="text-sm max-w-sm">Describe your app below. The AI will plan the file structure, generate each file, and show a live preview here.</p>
             </div>
           ) : (
             <iframe

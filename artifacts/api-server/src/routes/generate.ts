@@ -5,10 +5,12 @@ import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { db, generationsTable, usersTable } from "@workspace/db";
 import { desc, eq, count, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import archiver from "archiver";
 import {
   GenerateWebsiteBody,
   GenerateWebsiteResponse,
 } from "@workspace/api-zod";
+import type { ProjectFile } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -18,7 +20,9 @@ const FREE_PLAN_LIMIT = 3;
 const generateRateLimit = rateLimit({
   windowMs: 60 * 1000,
   limit: 10,
-  keyGenerator: (req: any) => String(req.session?.userId ?? req.ip),
+  // Use session userId — route requires auth so this is always set for real requests
+  keyGenerator: (req: any) => `user:${req.session?.userId ?? "anon"}`,
+  validate: { xForwardedForHeader: false },
   message: { error: "rate_limit", message: "Too many requests — please wait a minute." },
   standardHeaders: true,
   legacyHeaders: false,
@@ -26,10 +30,13 @@ const generateRateLimit = rateLimit({
 
 // ─── In-memory task queue ─────────────────────────────────────────────────────
 interface Task {
-  status: "pending" | "done" | "error";
+  status: "pending" | "planning" | "building" | "done" | "error";
   generationId?: number;
   html?: string;
   prompt?: string;
+  files?: ProjectFile[];
+  filesDone?: number;
+  filesTotal?: number;
   error?: string;
   createdAt: number;
 }
@@ -44,56 +51,106 @@ setInterval(() => {
   }
 }, 15 * 60 * 1000);
 
-// ─── AI generation helpers ────────────────────────────────────────────────────
-const SYSTEM_PROMPT = `You are an expert web developer. Generate a complete, beautiful, modern HTML landing page based on the user's description.
+// ─── System prompts ───────────────────────────────────────────────────────────
+const PLANNER_SYSTEM = `You are a senior software architect.
+Given an app idea, break it into files for a modern web application.
 
-Requirements:
-- Return ONLY raw HTML (no markdown, no code fences, no explanation)
-- Use Tailwind CSS via CDN: <script src="https://cdn.tailwindcss.com"></script>
-- Make it visually stunning with modern design: gradients, shadows, smooth animations
-- Include sections: hero, features, pricing, and a CTA
-- Use a professional dark theme by default unless specified otherwise
-- Make it fully responsive and mobile-friendly
-- Include realistic placeholder content that matches the description
-- Add subtle CSS animations and hover effects
-- The page should look like a real, polished startup landing page`;
+Return ONLY valid JSON (no markdown, no explanation):
+{
+  "files": [
+    {"name": "index.html", "description": "Main HTML entry point with navigation and layout"},
+    {"name": "styles.css", "description": "All CSS styles, animations, and responsive design"},
+    {"name": "app.js", "description": "Application logic, state management, and interactivity"}
+  ]
+}
 
-async function generateWithOpenAI(prompt: string): Promise<string> {
+Rules:
+- Always include index.html as the first file
+- Maximum 6 files
+- Keep it simple: HTML, CSS, JS only (no build tools, no frameworks)
+- Each file should have a clear, specific purpose`;
+
+const FILE_SYSTEM = (fileName: string, description: string) =>
+  `You are a senior web developer.
+Generate complete, production-quality code for the file: ${fileName}
+
+Purpose: ${description}
+
+Rules:
+- Return ONLY raw code (no markdown, no code fences, no explanation)
+- Write complete, working code — no placeholders, no TODOs
+- Make it beautiful and professional with modern UI
+- For HTML files: include all necessary <script> and <link> tags to connect other files
+- For CSS: include responsive design, animations, and modern styling
+- For JS: include full interactivity, event handlers, and state management`;
+
+// ─── AI helpers ───────────────────────────────────────────────────────────────
+async function planWithOpenAI(prompt: string): Promise<Array<{name: string; description: string}>> {
   const completion = await openai.chat.completions.create({
     model: "gpt-5.2",
-    max_completion_tokens: 8192,
+    max_completion_tokens: 1024,
     messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: `Create a beautiful landing page for: ${prompt}` },
+      { role: "system", content: PLANNER_SYSTEM },
+      { role: "user", content: `App idea: ${prompt}` },
+    ],
+  });
+  const raw = completion.choices[0]?.message?.content ?? "{}";
+  const parsed = JSON.parse(raw.replace(/^```json?\s*/i, "").replace(/\s*```$/i, "").trim());
+  return parsed.files ?? [];
+}
+
+async function planWithClaude(prompt: string): Promise<Array<{name: string; description: string}>> {
+  const message = await anthropic.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 1024,
+    system: PLANNER_SYSTEM,
+    messages: [{ role: "user", content: `App idea: ${prompt}` }],
+  });
+  const block = message.content[0];
+  const raw = block.type === "text" ? block.text : "{}";
+  const parsed = JSON.parse(raw.replace(/^```json?\s*/i, "").replace(/\s*```$/i, "").trim());
+  return parsed.files ?? [];
+}
+
+async function generateFileWithOpenAI(fileName: string, description: string, prompt: string): Promise<string> {
+  const completion = await openai.chat.completions.create({
+    model: "gpt-5.2",
+    max_completion_tokens: 4096,
+    messages: [
+      { role: "system", content: FILE_SYSTEM(fileName, description) },
+      { role: "user", content: `App idea: ${prompt}\nGenerate: ${fileName}` },
     ],
   });
   return completion.choices[0]?.message?.content ?? "";
 }
 
-async function generateWithClaude(prompt: string): Promise<string> {
+async function generateFileWithClaude(fileName: string, description: string, prompt: string): Promise<string> {
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 8192,
-    system: SYSTEM_PROMPT,
-    messages: [{ role: "user", content: `Create a beautiful landing page for: ${prompt}` }],
+    max_tokens: 4096,
+    system: FILE_SYSTEM(fileName, description),
+    messages: [{ role: "user", content: `App idea: ${prompt}\nGenerate: ${fileName}` }],
   });
   const block = message.content[0];
   return block.type === "text" ? block.text : "";
 }
 
-function cleanHtml(raw: string): string {
-  let html = raw
-    .replace(/^```html\s*/i, "")
-    .replace(/^```\s*/i, "")
+function stripCodeFences(code: string): string {
+  return code
+    .replace(/^```[\w]*\s*/i, "")
     .replace(/\s*```$/i, "")
     .trim();
-  if (!html.toLowerCase().includes("<html")) {
-    html = `<!DOCTYPE html><html><body>${html}</body></html>`;
-  }
-  return html;
 }
 
-// ─── Background generation worker ────────────────────────────────────────────
+function ensureFullHtml(html: string): string {
+  let h = stripCodeFences(html);
+  if (!h.toLowerCase().includes("<html")) {
+    h = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>App</title></head><body>${h}</body></html>`;
+  }
+  return h;
+}
+
+// ─── Main generation pipeline ─────────────────────────────────────────────────
 async function runGeneration(
   taskId: string,
   userId: number,
@@ -101,15 +158,50 @@ async function runGeneration(
   model: "openai" | "claude"
 ) {
   try {
-    const raw = model === "claude"
-      ? await generateWithClaude(prompt)
-      : await generateWithOpenAI(prompt);
+    // Step 1: Plan
+    tasks.set(taskId, { ...tasks.get(taskId)!, status: "planning" });
 
-    const html = cleanHtml(raw);
+    const plan = model === "claude"
+      ? await planWithClaude(prompt)
+      : await planWithOpenAI(prompt);
 
+    if (!plan.length) throw new Error("Planner returned no files");
+
+    // Step 2: Generate each file
+    tasks.set(taskId, {
+      ...tasks.get(taskId)!,
+      status: "building",
+      filesTotal: plan.length,
+      filesDone: 0,
+    });
+
+    const generatedFiles: ProjectFile[] = [];
+
+    for (const file of plan) {
+      const content = model === "claude"
+        ? await generateFileWithClaude(file.name, file.description, prompt)
+        : await generateFileWithOpenAI(file.name, file.description, prompt);
+
+      generatedFiles.push({
+        name: file.name,
+        description: file.description,
+        content: stripCodeFences(content),
+      });
+
+      tasks.set(taskId, {
+        ...tasks.get(taskId)!,
+        filesDone: generatedFiles.length,
+      });
+    }
+
+    // Step 3: Extract preview HTML (first .html file)
+    const htmlFile = generatedFiles.find((f) => f.name.endsWith(".html"));
+    const previewHtml = ensureFullHtml(htmlFile?.content ?? "<html><body><p>No HTML file generated</p></body></html>");
+
+    // Step 4: Save to DB
     const [generation] = await db
       .insert(generationsTable)
-      .values({ prompt, html, userId })
+      .values({ prompt, html: previewHtml, userId, files: generatedFiles })
       .returning();
 
     tasks.set(taskId, {
@@ -117,6 +209,9 @@ async function runGeneration(
       generationId: generation.id,
       html: generation.html,
       prompt: generation.prompt,
+      files: generatedFiles,
+      filesTotal: plan.length,
+      filesDone: plan.length,
       createdAt: Date.now(),
     });
   } catch (err) {
@@ -146,7 +241,7 @@ router.post("/generate", generateRateLimit, async (req: any, res: Response) => {
   const userId = req.session.userId;
   const plan = req.session.plan ?? "free";
 
-  // ── Prompt cache: return existing generation for same prompt+model ──────────
+  // ── Prompt cache: return existing generation for same prompt ────────────────
   if (plan === "free") {
     const [existing] = await db
       .select()
@@ -166,6 +261,7 @@ router.post("/generate", generateRateLimit, async (req: any, res: Response) => {
         generationId: existing.id,
         html: existing.html,
         prompt: existing.prompt,
+        files: (existing.files as ProjectFile[]) ?? undefined,
         createdAt: Date.now(),
       });
       res.json({ taskId, cached: true });
@@ -193,7 +289,6 @@ router.post("/generate", generateRateLimit, async (req: any, res: Response) => {
   const taskId = randomUUID();
   tasks.set(taskId, { status: "pending", createdAt: Date.now() });
 
-  // Fire-and-forget background generation
   runGeneration(taskId, userId, prompt, model);
 
   res.json({ taskId, cached: false });
@@ -218,12 +313,65 @@ router.get("/status/:taskId", (req: any, res: Response) => {
       id: task.generationId,
       html: task.html,
       prompt: task.prompt,
+      files: task.files ?? null,
     });
   } else if (task.status === "error") {
     res.json({ status: "error", error: task.error });
   } else {
-    res.json({ status: "pending" });
+    res.json({
+      status: task.status,
+      filesDone: task.filesDone ?? 0,
+      filesTotal: task.filesTotal ?? 0,
+    });
   }
+});
+
+// ─── GET /project/:id/zip — download project as ZIP ──────────────────────────
+router.get("/project/:id/zip", async (req: any, res: Response) => {
+  if (!req.session?.userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid project ID" });
+    return;
+  }
+
+  const [generation] = await db
+    .select()
+    .from(generationsTable)
+    .where(eq(generationsTable.id, id));
+
+  if (!generation) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+
+  const projectFiles: ProjectFile[] = (generation.files as ProjectFile[]) ?? [
+    { name: "index.html", content: generation.html },
+  ];
+
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="nexus-project-${id}.zip"`
+  );
+
+  const archive = archiver("zip", { zlib: { level: 9 } });
+  archive.on("error", (err) => {
+    console.error("Archive error:", err);
+    if (!res.headersSent) res.status(500).json({ error: "Failed to create ZIP" });
+  });
+
+  archive.pipe(res);
+
+  for (const file of projectFiles) {
+    archive.append(file.content, { name: file.name });
+  }
+
+  await archive.finalize();
 });
 
 // ─── GET /generations — list user's generations ───────────────────────────────
@@ -246,6 +394,7 @@ router.get("/generations", async (req: any, res: Response) => {
         id: g.id,
         prompt: g.prompt,
         html: g.html,
+        files: g.files ?? null,
         createdAt: g.createdAt.toISOString(),
       }))
     );

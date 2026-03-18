@@ -80,9 +80,26 @@ Rules:
 - Return ONLY raw code (no markdown, no code fences, no explanation)
 - Write complete, working code — no placeholders, no TODOs
 - Make it beautiful and professional with modern UI
-- For HTML files: include all necessary <script> and <link> tags to connect other files
 - For CSS: include responsive design, animations, and modern styling
 - For JS: include full interactivity, event handlers, and state management`;
+
+// Specialized prompt for index.html — generated last so we know exactly which files to link.
+const HTML_SYSTEM = (description: string, otherFiles: string[]) =>
+  `You are a senior web developer.
+Generate a complete index.html file.
+
+Purpose: ${description}
+
+Files in this project that you MUST link: ${otherFiles.join(", ")}
+
+Rules:
+- Return ONLY the raw HTML (no markdown, no code fences, no explanation)
+- Start with <!DOCTYPE html> and include <html>, <head>, <body> tags
+- In <head>: add <link rel="stylesheet"> for every .css file listed above
+- Before </body>: add <script src="..."> for every .js file listed above, in dependency order
+- Add a proper page title, meta charset UTF-8, and viewport meta tag
+- The HTML structure and content must match the app described in the purpose
+- Do NOT inline any CSS or JS — reference the separate files only`;
 
 // ─── AI helpers ───────────────────────────────────────────────────────────────
 async function planWithOpenAI(prompt: string): Promise<Array<{name: string; description: string}>> {
@@ -112,15 +129,24 @@ async function planWithClaude(prompt: string): Promise<Array<{name: string; desc
   return parsed.files ?? [];
 }
 
-async function generateFileWithOpenAI(fileName: string, description: string, prompt: string): Promise<string> {
+async function generateFileWithOpenAI(
+  fileName: string,
+  description: string,
+  prompt: string,
+  otherFiles?: string[]
+): Promise<string> {
+  const isHtml = fileName.endsWith(".html");
+  const systemPrompt = isHtml && otherFiles
+    ? HTML_SYSTEM(description, otherFiles)
+    : FILE_SYSTEM(fileName, description);
+
   const completion = await openai.chat.completions.create({
     model: "gpt-5.2",
     // gpt-5.2 is a reasoning model — reasoning tokens count against this budget.
-    // 4096 was silently exhausted by internal thinking, producing 0-char output.
-    // 16000 gives enough room for both reasoning and actual code.
-    max_completion_tokens: 16000,
+    // Bumped to 32000 so there is room for thinking + full code output.
+    max_completion_tokens: 32000,
     messages: [
-      { role: "system", content: FILE_SYSTEM(fileName, description) },
+      { role: "system", content: systemPrompt },
       { role: "user", content: `App idea: ${prompt}\nGenerate: ${fileName}` },
     ],
   } as any);
@@ -131,11 +157,21 @@ async function generateFileWithOpenAI(fileName: string, description: string, pro
   return content;
 }
 
-async function generateFileWithClaude(fileName: string, description: string, prompt: string): Promise<string> {
+async function generateFileWithClaude(
+  fileName: string,
+  description: string,
+  prompt: string,
+  otherFiles?: string[]
+): Promise<string> {
+  const isHtml = fileName.endsWith(".html");
+  const systemPrompt = isHtml && otherFiles
+    ? HTML_SYSTEM(description, otherFiles)
+    : FILE_SYSTEM(fileName, description);
+
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 4096,
-    system: FILE_SYSTEM(fileName, description),
+    max_tokens: 8192,
+    system: systemPrompt,
     messages: [{ role: "user", content: `App idea: ${prompt}\nGenerate: ${fileName}` }],
   });
   const block = message.content[0];
@@ -143,6 +179,34 @@ async function generateFileWithClaude(fileName: string, description: string, pro
   console.log(`[Claude] ${fileName}: stop_reason=${message.stop_reason}, len=${content.length}`);
   if (!content) console.warn(`[Claude] WARNING: empty content for ${fileName}`, JSON.stringify(message.content));
   return content;
+}
+
+// Fallback minimal HTML that links all project files — used if AI HTML generation fails.
+function buildFallbackHtml(
+  description: string,
+  otherFiles: string[]
+): string {
+  const cssLinks = otherFiles
+    .filter((f) => f.endsWith(".css"))
+    .map((f) => `  <link rel="stylesheet" href="${f}">`)
+    .join("\n");
+  const jsScripts = otherFiles
+    .filter((f) => f.endsWith(".js"))
+    .map((f) => `  <script src="${f}"></script>`)
+    .join("\n");
+  const title = description.split(":")[0].trim().slice(0, 60) || "App";
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+${cssLinks}
+</head>
+<body>
+${jsScripts}
+</body>
+</html>`;
 }
 
 function stripCodeFences(code: string): string {
@@ -234,15 +298,34 @@ async function runGeneration(
 
     const generatedFiles: ProjectFile[] = [];
 
-    for (const file of plan) {
-      const content = model === "claude"
-        ? await generateFileWithClaude(file.name, file.description, prompt)
-        : await generateFileWithOpenAI(file.name, file.description, prompt);
+    // Generate non-HTML files first, then HTML last.
+    // This lets the HTML generator know exactly which CSS/JS files to link,
+    // and avoids spending all reasoning tokens planning unknown dependencies.
+    const htmlFiles = plan.filter((f) => f.name.endsWith(".html"));
+    const nonHtmlFiles = plan.filter((f) => !f.name.endsWith(".html"));
+    const orderedPlan = [...nonHtmlFiles, ...htmlFiles];
+
+    for (const file of orderedPlan) {
+      const otherFileNames = orderedPlan
+        .filter((f) => f.name !== file.name)
+        .map((f) => f.name);
+
+      const rawContent = model === "claude"
+        ? await generateFileWithClaude(file.name, file.description, prompt, otherFileNames)
+        : await generateFileWithOpenAI(file.name, file.description, prompt, otherFileNames);
+
+      let content = stripCodeFences(rawContent);
+
+      // Fallback: if HTML generation still returns empty, build a minimal linking shell.
+      if (!content && file.name.endsWith(".html")) {
+        console.warn(`[generator] Using fallback HTML for ${file.name}`);
+        content = buildFallbackHtml(file.description, otherFileNames);
+      }
 
       generatedFiles.push({
         name: file.name,
         description: file.description,
-        content: stripCodeFences(content),
+        content,
       });
 
       tasks.set(taskId, {

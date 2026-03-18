@@ -57,48 +57,48 @@
   }
 }
 
-/* Force Dark Mode Professional Theme Globally */
+/* Light Mode Professional Theme */
 :root {
-  --background: 240 10% 4%;
-  --foreground: 0 0% 98%;
-  --card: 240 10% 6%;
-  --card-foreground: 0 0% 98%;
-  --card-border: 240 10% 12%;
-  --popover: 240 10% 6%;
-  --popover-foreground: 0 0% 98%;
-  --popover-border: 240 10% 12%;
-  
-  --primary: 195 100% 50%; /* Electric Cyan */
-  --primary-foreground: 240 10% 4%;
-  
-  --secondary: 240 10% 12%;
-  --secondary-foreground: 0 0% 98%;
-  
-  --muted: 240 10% 12%;
-  --muted-foreground: 240 5% 65%;
-  
-  --accent: 270 100% 60%; /* Neon Purple */
-  --accent-foreground: 0 0% 98%;
-  
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 0 0% 98%;
-  
-  --border: 240 10% 16%;
-  --input: 240 10% 16%;
-  --ring: 195 100% 50%;
-  
+  --background: 220 25% 97%;
+  --foreground: 240 15% 12%;
+  --card: 0 0% 100%;
+  --card-foreground: 240 15% 12%;
+  --card-border: 220 15% 90%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 240 15% 12%;
+  --popover-border: 220 15% 90%;
+
+  --primary: 195 80% 38%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 220 15% 93%;
+  --secondary-foreground: 240 15% 12%;
+
+  --muted: 220 15% 93%;
+  --muted-foreground: 240 6% 46%;
+
+  --accent: 262 70% 55%;
+  --accent-foreground: 0 0% 100%;
+
+  --destructive: 0 78% 55%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 220 15% 88%;
+  --input: 220 15% 88%;
+  --ring: 195 80% 38%;
+
   --radius: 0.75rem;
 
-  --sidebar: 240 10% 6%;
-  --sidebar-foreground: 0 0% 98%;
-  --sidebar-border: 240 10% 12%;
-  --sidebar-primary: 195 100% 50%;
-  --sidebar-primary-foreground: 240 10% 4%;
-  --sidebar-accent: 240 10% 12%;
-  --sidebar-accent-foreground: 0 0% 98%;
-  --sidebar-ring: 195 100% 50%;
-  
-  --shadow-glow: 0 0 20px -5px hsl(195 100% 50% / 0.5);
+  --sidebar: 220 20% 95%;
+  --sidebar-foreground: 240 15% 12%;
+  --sidebar-border: 220 15% 88%;
+  --sidebar-primary: 195 80% 38%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 220 15% 91%;
+  --sidebar-accent-foreground: 240 15% 12%;
+  --sidebar-ring: 195 80% 38%;
+
+  --shadow-glow: 0 0 20px -5px hsl(195 80% 38% / 0.35);
 }
 
 @layer base {

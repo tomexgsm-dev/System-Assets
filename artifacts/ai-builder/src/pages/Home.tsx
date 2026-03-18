@@ -39,10 +39,10 @@ export default function Home() {
     <div className="flex h-screen w-full bg-background overflow-hidden relative">
       {/* Background aesthetic */}
       <div
-        className="absolute inset-0 z-0 opacity-20 pointer-events-none bg-cover bg-center"
+        className="absolute inset-0 z-0 opacity-8 pointer-events-none bg-cover bg-center"
         style={{ backgroundImage: `url('${import.meta.env.BASE_URL}images/mesh-bg.png')` }}
       />
-      <div className="absolute inset-0 z-0 bg-gradient-to-b from-background/40 via-background/80 to-background pointer-events-none" />
+      <div className="absolute inset-0 z-0 bg-gradient-to-b from-background/10 via-background/50 to-background pointer-events-none" />
 
       <Sidebar onSelectGeneration={handleSelectHistory} activeId={activeGenerationId} />
 

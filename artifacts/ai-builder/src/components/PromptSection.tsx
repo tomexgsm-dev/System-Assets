@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Sparkles, Loader2 } from "lucide-react";
+import { Sparkles, Loader2, Crown } from "lucide-react";
 
 type Model = "openai" | "claude";
 
@@ -7,6 +7,8 @@ interface PromptSectionProps {
   onSubmit: (prompt: string, model: Model) => void;
   isLoading: boolean;
   currentPrompt?: string;
+  limitError?: boolean;
+  onUpgrade?: () => void;
 }
 
 const MODEL_OPTIONS: { value: Model; label: string; badge: string; color: string }[] = [
@@ -14,7 +16,7 @@ const MODEL_OPTIONS: { value: Model; label: string; badge: string; color: string
   { value: "claude", label: "Claude", badge: "Sonnet 4.6", color: "from-orange-500 to-amber-500" },
 ];
 
-export function PromptSection({ onSubmit, isLoading, currentPrompt }: PromptSectionProps) {
+export function PromptSection({ onSubmit, isLoading, currentPrompt, limitError, onUpgrade }: PromptSectionProps) {
   const [prompt, setPrompt] = useState("");
   const [model, setModel] = useState<Model>("openai");
 
@@ -39,13 +41,31 @@ export function PromptSection({ onSubmit, isLoading, currentPrompt }: PromptSect
         <p className="text-muted-foreground">Describe the website you want, and our AI will generate the layout instantly.</p>
       </div>
 
+      {limitError && (
+        <div className="mb-4 flex items-center justify-between gap-4 bg-orange-500/10 border border-orange-500/30 rounded-xl px-4 py-3">
+          <div>
+            <p className="text-sm font-semibold text-orange-700 dark:text-orange-400">Free plan limit reached</p>
+            <p className="text-xs text-orange-600 dark:text-orange-300">Upgrade to PRO for unlimited generations at $9.99.</p>
+          </div>
+          {onUpgrade && (
+            <button
+              onClick={onUpgrade}
+              className="shrink-0 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors flex items-center gap-1.5"
+            >
+              <Crown className="w-3.5 h-3.5" />
+              Upgrade
+            </button>
+          )}
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="relative group">
         <div className="absolute -inset-1 bg-gradient-to-r from-primary/30 to-accent/30 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-500"></div>
         <div className="relative bg-card border border-border/50 rounded-2xl shadow-xl overflow-hidden focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/50 transition-all">
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            disabled={isLoading}
+            disabled={isLoading || limitError}
             placeholder="E.g. A sleek landing page for a futuristic AI SaaS startup with dark mode, glowing buttons, hero section, pricing, and CTA..."
             className="w-full bg-transparent p-5 min-h-[120px] resize-none text-foreground placeholder:text-muted-foreground/60 focus:outline-none disabled:opacity-50 font-body text-base leading-relaxed"
             onKeyDown={(e) => {
@@ -56,9 +76,7 @@ export function PromptSection({ onSubmit, isLoading, currentPrompt }: PromptSect
             }}
           />
 
-          {/* Model selector + submit */}
           <div className="flex items-center justify-between px-4 py-3 bg-background/50 border-t border-border/50 backdrop-blur-md gap-3">
-            {/* Model tabs */}
             <div className="flex items-center gap-1.5 bg-muted/40 rounded-xl p-1 border border-border/40">
               {MODEL_OPTIONS.map((opt) => (
                 <button
@@ -72,9 +90,7 @@ export function PromptSection({ onSubmit, isLoading, currentPrompt }: PromptSect
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  <span
-                    className={`inline-block w-2 h-2 rounded-full bg-gradient-to-br ${opt.color}`}
-                  />
+                  <span className={`inline-block w-2 h-2 rounded-full bg-gradient-to-br ${opt.color}`} />
                   {opt.label}
                   {model === opt.value && (
                     <span className={`text-[10px] px-1.5 py-0.5 rounded-md bg-gradient-to-r ${opt.color} text-white font-bold`}>
@@ -93,19 +109,13 @@ export function PromptSection({ onSubmit, isLoading, currentPrompt }: PromptSect
               </div>
               <button
                 type="submit"
-                disabled={isLoading || !prompt.trim()}
+                disabled={isLoading || !prompt.trim() || limitError}
                 className={`px-5 py-2.5 rounded-xl font-bold text-sm bg-gradient-to-r ${selected.color} text-white shadow-lg hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none transition-all duration-200 flex items-center gap-2`}
               >
                 {isLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Generating...
-                  </>
+                  <><Loader2 className="w-4 h-4 animate-spin" />Generating...</>
                 ) : (
-                  <>
-                    <Sparkles className="w-4 h-4" />
-                    Generate Site
-                  </>
+                  <><Sparkles className="w-4 h-4" />Generate Site</>
                 )}
               </button>
             </div>

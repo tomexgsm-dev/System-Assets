@@ -1,14 +1,16 @@
 import { Router, type IRouter } from "express";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
-import { db, generationsTable } from "@workspace/db";
-import { desc, eq } from "drizzle-orm";
+import { db, generationsTable, usersTable } from "@workspace/db";
+import { desc, eq, count } from "drizzle-orm";
 import {
   GenerateWebsiteBody,
   GenerateWebsiteResponse,
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
+
+const FREE_PLAN_LIMIT = 3;
 
 const SYSTEM_PROMPT = `You are an expert web developer. Generate a complete, beautiful, modern HTML landing page based on the user's description.
 
@@ -59,6 +61,11 @@ function cleanHtml(raw: string): string {
 }
 
 router.post("/generate", async (req, res) => {
+  if (!req.session?.userId) {
+    res.status(401).json({ error: "Login required to generate websites" });
+    return;
+  }
+
   const parsed = GenerateWebsiteBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid request body" });
@@ -66,6 +73,24 @@ router.post("/generate", async (req, res) => {
   }
 
   const { prompt, model = "openai" } = parsed.data;
+  const userId = req.session.userId;
+  const plan = req.session.plan ?? "free";
+
+  // Enforce free plan limit
+  if (plan === "free") {
+    const [{ value }] = await db
+      .select({ value: count() })
+      .from(generationsTable)
+      .where(eq(generationsTable.userId, userId));
+
+    if (value >= FREE_PLAN_LIMIT) {
+      res.status(403).json({
+        error: "limit_reached",
+        message: `Free plan allows ${FREE_PLAN_LIMIT} generations. Upgrade to PRO for unlimited.`,
+      });
+      return;
+    }
+  }
 
   try {
     const raw =
@@ -77,7 +102,7 @@ router.post("/generate", async (req, res) => {
 
     const [generation] = await db
       .insert(generationsTable)
-      .values({ prompt, html })
+      .values({ prompt, html, userId })
       .returning();
 
     const response = GenerateWebsiteResponse.parse({
@@ -88,18 +113,24 @@ router.post("/generate", async (req, res) => {
 
     res.json(response);
   } catch (err) {
-    console.error("Generation error:", err);
+    console.error("Generation error:", String(err));
     res.status(500).json({ error: "Failed to generate website" });
   }
 });
 
-router.get("/generations", async (_req, res) => {
+router.get("/generations", async (req, res) => {
+  if (!req.session?.userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+
   try {
     const generations = await db
       .select()
       .from(generationsTable)
+      .where(eq(generationsTable.userId, req.session.userId))
       .orderBy(desc(generationsTable.createdAt))
-      .limit(20);
+      .limit(50);
 
     res.json(
       generations.map((g) => ({
@@ -136,7 +167,7 @@ router.get("/project/:id", async (req, res) => {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.send(generation.html);
   } catch (err) {
-    console.error("View project error:", err);
+    console.error("View project error:", String(err));
     res.status(500).send("<html><body>Error loading project</body></html>");
   }
 });

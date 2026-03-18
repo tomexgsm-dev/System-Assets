@@ -7,7 +7,14 @@ import {
 import { useToast } from "@/hooks/use-toast";
 
 export function useBuilderGenerations() {
-  return useListGenerations();
+  return useListGenerations({
+    query: {
+      retry: (failureCount, error: any) => {
+        if (error?.status === 401) return false;
+        return failureCount < 2;
+      },
+    },
+  });
 }
 
 export function useBuilderGenerate() {
@@ -20,15 +27,18 @@ export function useBuilderGenerate() {
         queryClient.invalidateQueries({ queryKey: getListGenerationsQueryKey() });
         toast({
           title: "Website generated!",
-          description: `Project saved. Open it at /api/project/${data.id}`,
+          description: `Saved as Project #${data.id} — open it at /api/project/${data.id}`,
         });
       },
       onError: (error: any) => {
-        toast({
-          title: "Generation Failed",
-          description: error?.message || "An unexpected error occurred while generating the website.",
-          variant: "destructive",
-        });
+        const isLimit = error?.data?.error === "limit_reached";
+        if (!isLimit) {
+          toast({
+            title: "Generation Failed",
+            description: error?.message || "An unexpected error occurred.",
+            variant: "destructive",
+          });
+        }
       },
     },
   });

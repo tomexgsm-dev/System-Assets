@@ -1,0 +1,209 @@
+/app
+ ├── server.py
+ ├── generator.py
+ ├── database.db
+ ├── projects/
+ ├── templates/
+ │    ├── index.html
+ │    ├── login.html
+ │    ├── register.html
+ │    └── dashboard.html
+ └── static/
+      └── app.js
+🧠 📁 server.py (LOGIN + STRIPE)
+import os
+import sqlite3
+import uuid
+import stripe
+from flask import Flask, request, jsonify, render_template, redirect, session
+
+from generator import generate_website
+
+app = Flask(__name__)
+app.secret_key = "SECRET_KEY"
+
+stripe.api_key = "YOUR_STRIPE_SECRET_KEY"
+
+DB = "database.db"
+PROJECTS_DIR = "projects"
+os.makedirs(PROJECTS_DIR, exist_ok=True)
+
+
+def get_db():
+    return sqlite3.connect(DB)
+
+
+# 🔥 INIT DB
+def init_db():
+    db = get_db()
+    db.execute("""CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT,
+        password TEXT,
+        plan TEXT DEFAULT 'free'
+    )""")
+
+    db.execute("""CREATE TABLE IF NOT EXISTS projects (
+        id TEXT,
+        user_id INTEGER,
+        html TEXT
+    )""")
+    db.commit()
+
+init_db()
+
+
+# 🏠 HOME
+@app.route("/")
+def home():
+    return render_template("index.html")
+
+
+# 🔐 REGISTER
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "POST":
+        email = request.form["email"]
+        password = request.form["password"]
+
+        db = get_db()
+        db.execute("INSERT INTO users (email, password) VALUES (?, ?)", (email, password))
+        db.commit()
+
+        return redirect("/login")
+
+    return render_template("register.html")
+
+
+# 🔐 LOGIN
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        email = request.form["email"]
+        password = request.form["password"]
+
+        db = get_db()
+        user = db.execute("SELECT * FROM users WHERE email=? AND password=?", (email, password)).fetchone()
+
+        if user:
+            session["user_id"] = user[0]
+            return redirect("/dashboard")
+
+    return render_template("login.html")
+
+
+# 📊 DASHBOARD
+@app.route("/dashboard")
+def dashboard():
+    if "user_id" not in session:
+        return redirect("/login")
+
+    db = get_db()
+    projects = db.execute("SELECT id FROM projects WHERE user_id=?", (session["user_id"],)).fetchall()
+
+    return render_template("dashboard.html", projects=projects)
+
+
+# 🤖 GENERATE (LIMIT FREE)
+@app.route("/generate", methods=["POST"])
+def generate():
+    if "user_id" not in session:
+        return jsonify({"error": "login required"})
+
+    db = get_db()
+    user = db.execute("SELECT plan FROM users WHERE id=?", (session["user_id"],)).fetchone()
+
+    if user[0] == "free":
+        count = db.execute("SELECT COUNT(*) FROM projects WHERE user_id=?", (session["user_id"],)).fetchone()[0]
+        if count >= 3:
+            return jsonify({"error": "limit reached - upgrade to PRO"})
+
+    data = request.json
+    prompt = data["prompt"]
+
+    html = generate_website(prompt)
+
+    project_id = str(uuid.uuid4())
+
+    db.execute("INSERT INTO projects (id, user_id, html) VALUES (?, ?, ?)",
+               (project_id, session["user_id"], html))
+    db.commit()
+
+    return jsonify({
+        "html": html,
+        "url": f"/project/{project_id}"
+    })
+
+
+# 🌐 VIEW PROJECT
+@app.route("/project/<id>")
+def view_project(id):
+    db = get_db()
+    project = db.execute("SELECT html FROM projects WHERE id=?", (id,)).fetchone()
+    return project[0]
+
+
+# 💳 STRIPE CHECKOUT
+@app.route("/create-checkout-session")
+def create_checkout():
+    session_stripe = stripe.checkout.Session.create(
+        payment_method_types=["card"],
+        line_items=[{
+            "price_data": {
+                "currency": "usd",
+                "product_data": {"name": "PRO PLAN"},
+                "unit_amount": 999,
+            },
+            "quantity": 1,
+        }],
+        mode="payment",
+        success_url="http://localhost:5000/success",
+        cancel_url="http://localhost:5000/cancel",
+    )
+    return redirect(session_stripe.url)
+
+
+# ✅ SUCCESS
+@app.route("/success")
+def success():
+    db = get_db()
+    db.execute("UPDATE users SET plan='pro' WHERE id=?", (session["user_id"],))
+    db.commit()
+
+    return "✅ PRO ACTIVATED"
+
+
+# ❌ CANCEL
+@app.route("/cancel")
+def cancel():
+    return "Payment cancelled"
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
+📁 templates/login.html
+<form method="POST">
+  <input name="email" placeholder="Email">
+  <input name="password" placeholder="Password">
+  <button>Login</button>
+</form>
+<a href="/register">Register</a>
+📁 templates/register.html
+<form method="POST">
+  <input name="email" placeholder="Email">
+  <input name="password" placeholder="Password">
+  <button>Register</button>
+</form>
+📁 templates/dashboard.html
+<h2>📊 Dashboard</h2>
+
+<a href="/">➕ Nowy projekt</a>
+
+<h3>Twoje projekty:</h3>
+<ul>
+{% for p in projects %}
+  <li><a href="/project/{{ p[0] }}" target="_blank">{{ p[0] }}</a></li>
+{% endfor %}
+</ul>
+
+<a href="/create-checkout-session">🔥 Upgrade do PRO</a>

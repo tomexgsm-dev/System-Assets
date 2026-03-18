@@ -37,6 +37,9 @@ interface Task {
   files?: ProjectFile[];
   filesDone?: number;
   filesTotal?: number;
+  filePlan?: Array<{ name: string; description: string }>;
+  completedFiles?: string[];
+  currentFile?: string;
   error?: string;
   createdAt: number;
 }
@@ -289,23 +292,30 @@ async function runGeneration(
     if (!plan.length) throw new Error("Planner returned no files");
 
     // Step 2: Generate each file
-    tasks.set(taskId, {
-      ...tasks.get(taskId)!,
-      status: "building",
-      filesTotal: plan.length,
-      filesDone: 0,
-    });
-
-    const generatedFiles: ProjectFile[] = [];
-
     // Generate non-HTML files first, then HTML last.
-    // This lets the HTML generator know exactly which CSS/JS files to link,
-    // and avoids spending all reasoning tokens planning unknown dependencies.
     const htmlFiles = plan.filter((f) => f.name.endsWith(".html"));
     const nonHtmlFiles = plan.filter((f) => !f.name.endsWith(".html"));
     const orderedPlan = [...nonHtmlFiles, ...htmlFiles];
 
+    tasks.set(taskId, {
+      ...tasks.get(taskId)!,
+      status: "building",
+      filesTotal: orderedPlan.length,
+      filesDone: 0,
+      filePlan: orderedPlan,
+      completedFiles: [],
+      currentFile: orderedPlan[0]?.name,
+    });
+
+    const generatedFiles: ProjectFile[] = [];
+
     for (const file of orderedPlan) {
+      // Mark this file as currently being generated
+      tasks.set(taskId, {
+        ...tasks.get(taskId)!,
+        currentFile: file.name,
+      });
+
       const otherFileNames = orderedPlan
         .filter((f) => f.name !== file.name)
         .map((f) => f.name);
@@ -328,9 +338,12 @@ async function runGeneration(
         content,
       });
 
+      const prev = tasks.get(taskId)!;
       tasks.set(taskId, {
-        ...tasks.get(taskId)!,
+        ...prev,
         filesDone: generatedFiles.length,
+        completedFiles: [...(prev.completedFiles ?? []), file.name],
+        currentFile: orderedPlan[generatedFiles.length]?.name,
       });
     }
 
@@ -482,6 +495,9 @@ router.get("/status/:taskId", (req: any, res: Response) => {
       status: task.status,
       filesDone: task.filesDone ?? 0,
       filesTotal: task.filesTotal ?? 0,
+      filePlan: task.filePlan ?? null,
+      completedFiles: task.completedFiles ?? [],
+      currentFile: task.currentFile ?? null,
     });
   }
 });

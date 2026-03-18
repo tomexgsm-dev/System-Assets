@@ -12,6 +12,9 @@ export interface GenerationProgress {
   phase: "pending" | "planning" | "building" | "done" | "error";
   filesDone: number;
   filesTotal: number;
+  filePlan: Array<{ name: string; description: string }> | null;
+  completedFiles: string[];
+  currentFile: string | null;
 }
 
 export interface GenerationResult {
@@ -56,6 +59,9 @@ async function pollTaskStatus(
       phase: data.status,
       filesDone: data.filesDone ?? 0,
       filesTotal: data.filesTotal ?? 0,
+      filePlan: data.filePlan ?? null,
+      completedFiles: data.completedFiles ?? [],
+      currentFile: data.currentFile ?? null,
     });
 
     await new Promise<void>((resolve, reject) => {
@@ -73,18 +79,23 @@ export function useBuilderGenerate() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const [progress, setProgress] = useState<GenerationProgress>({
+  const emptyProgress: GenerationProgress = {
     phase: "pending",
     filesDone: 0,
     filesTotal: 0,
-  });
+    filePlan: null,
+    completedFiles: [],
+    currentFile: null,
+  };
+
+  const [progress, setProgress] = useState<GenerationProgress>(emptyProgress);
 
   // Use ref so mutationFn closure always gets the latest setter
   const setProgressRef = useRef(setProgress);
   setProgressRef.current = setProgress;
 
   const resetProgress = useCallback(() => {
-    setProgress({ phase: "pending", filesDone: 0, filesTotal: 0 });
+    setProgress(emptyProgress);
   }, []);
 
   const mutation = useMutation({
@@ -98,7 +109,7 @@ export function useBuilderGenerate() {
       const abortController = new AbortController();
       const effectiveSignal = signal ?? abortController.signal;
 
-      setProgressRef.current({ phase: "pending", filesDone: 0, filesTotal: 0 });
+      setProgressRef.current(emptyProgress);
 
       // Start the async generation task
       const res = await fetch(`${BASE}/api/generate`, {
@@ -138,7 +149,14 @@ export function useBuilderGenerate() {
       return { ...result, cached: false };
     },
     onSuccess: (data) => {
-      setProgress({ phase: "done", filesDone: data.files?.length ?? 1, filesTotal: data.files?.length ?? 1 });
+      setProgress({
+        phase: "done",
+        filesDone: data.files?.length ?? 1,
+        filesTotal: data.files?.length ?? 1,
+        filePlan: data.files?.map((f) => ({ name: f.name, description: f.description ?? "" })) ?? null,
+        completedFiles: data.files?.map((f) => f.name) ?? [],
+        currentFile: null,
+      });
       queryClient.invalidateQueries({ queryKey: getListGenerationsQueryKey() });
 
       const fileCount = data.files?.length;

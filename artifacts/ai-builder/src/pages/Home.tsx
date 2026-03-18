@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { Sidebar } from "@/components/Sidebar";
 import { PromptSection } from "@/components/PromptSection";
 import { BrowserPreview } from "@/components/BrowserPreview";
+import { AIProgressPanel } from "@/components/AIProgressPanel";
 import { useBuilderGenerate, useBuilderGenerations, type GenerationResult } from "@/hooks/use-builder";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -102,6 +103,10 @@ export default function Home() {
       <div className="absolute inset-0 z-0 bg-gradient-to-b from-background/10 via-background/50 to-background pointer-events-none" />
 
       <Sidebar onSelectGeneration={handleSelectHistory} activeId={currentId} />
+
+      {(isPending || progress.phase === "done" || progress.phase === "error") && (
+        <AIProgressPanel progress={progress} />
+      )}
 
       <main className="flex-1 flex flex-col h-full overflow-hidden relative">
         <PromptSection

@@ -1,17 +1,20 @@
 import React, { useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Copy, Check, LayoutTemplate, Monitor, Sparkles } from "lucide-react";
+import { Copy, Check, LayoutTemplate, Monitor, Sparkles, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface BrowserPreviewProps {
   html: string | null;
   isLoading: boolean;
+  currentId?: number;
 }
 
-export function BrowserPreview({ html, isLoading }: BrowserPreviewProps) {
+export function BrowserPreview({ html, isLoading, currentId }: BrowserPreviewProps) {
   const [copied, setCopied] = React.useState(false);
   const { toast } = useToast();
   const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  const projectUrl = currentId ? `/api/project/${currentId}` : null;
 
   const handleCopy = () => {
     if (!html) return;
@@ -21,6 +24,10 @@ export function BrowserPreview({ html, isLoading }: BrowserPreviewProps) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleOpenInTab = () => {
+    if (projectUrl) window.open(projectUrl, "_blank");
+  };
+
   return (
     <div className="flex-1 w-full max-w-[1400px] mx-auto px-6 pb-6 flex flex-col relative z-20">
       <div className="flex items-center justify-between mb-3 px-1">
@@ -28,15 +35,26 @@ export function BrowserPreview({ html, isLoading }: BrowserPreviewProps) {
           <Monitor className="w-5 h-5 text-primary" />
           Live Preview
         </h3>
-        
+
         {html && !isLoading && (
-          <button
-            onClick={handleCopy}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary/80 hover:bg-secondary text-secondary-foreground text-sm font-medium transition-colors border border-border/50"
-          >
-            {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4 text-muted-foreground" />}
-            {copied ? "Copied" : "Copy HTML"}
-          </button>
+          <div className="flex items-center gap-2">
+            {projectUrl && (
+              <button
+                onClick={handleOpenInTab}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-sm font-medium transition-colors border border-primary/20"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Open in new tab
+              </button>
+            )}
+            <button
+              onClick={handleCopy}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary/80 hover:bg-secondary text-secondary-foreground text-sm font-medium transition-colors border border-border/50"
+            >
+              {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-muted-foreground" />}
+              {copied ? "Copied" : "Copy HTML"}
+            </button>
+          </div>
         )}
       </div>
 
@@ -49,9 +67,20 @@ export function BrowserPreview({ html, isLoading }: BrowserPreviewProps) {
             <div className="w-3 h-3 rounded-full bg-green-500/80"></div>
           </div>
           <div className="absolute left-1/2 -translate-x-1/2 w-full max-w-sm">
-            <div className="w-full h-7 bg-background/50 border border-border/30 rounded-md flex items-center justify-center text-[11px] font-mono text-muted-foreground">
-              <span className="opacity-50 mr-1">https://</span>nexus.preview.local
-            </div>
+            {projectUrl ? (
+              <button
+                onClick={handleOpenInTab}
+                className="w-full h-7 bg-background/50 border border-border/30 rounded-md flex items-center justify-center text-[11px] font-mono text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors group/bar gap-1"
+              >
+                <span className="opacity-50">https://</span>
+                <span>nexus.preview.local</span>
+                <ExternalLink className="w-2.5 h-2.5 opacity-0 group-hover/bar:opacity-70 transition-opacity ml-1" />
+              </button>
+            ) : (
+              <div className="w-full h-7 bg-background/50 border border-border/30 rounded-md flex items-center justify-center text-[11px] font-mono text-muted-foreground">
+                <span className="opacity-50 mr-1">https://</span>nexus.preview.local
+              </div>
+            )}
           </div>
         </div>
 
@@ -59,7 +88,7 @@ export function BrowserPreview({ html, isLoading }: BrowserPreviewProps) {
         <div className="flex-1 relative bg-white overflow-hidden">
           <AnimatePresence>
             {isLoading && (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -72,8 +101,7 @@ export function BrowserPreview({ html, isLoading }: BrowserPreviewProps) {
                 </div>
                 <h4 className="mt-6 text-xl font-display font-semibold text-white animate-pulse">Constructing Layout...</h4>
                 <p className="text-muted-foreground text-sm mt-2 max-w-xs text-center">AI is writing semantic HTML and styling components.</p>
-                
-                {/* Sci-fi scanning line */}
+
                 <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-20">
                   <div className="w-full h-32 bg-gradient-to-b from-transparent via-primary/50 to-transparent animate-scan"></div>
                 </div>

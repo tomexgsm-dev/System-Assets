@@ -1,0 +1,108 @@
+/app
+ ├── server.py
+ ├── generator.py
+ ├── projects/        ← tu zapisujemy strony
+ ├── templates/
+ │    ├── index.html
+ │    └── projects.html
+ └── static/
+      └── app.js
+📁 UPDATE server.py
+from flask import Flask, request, jsonify, render_template, send_from_directory
+import os
+import uuid
+from generator import generate_website
+
+app = Flask(__name__)
+
+PROJECTS_DIR = "projects"
+os.makedirs(PROJECTS_DIR, exist_ok=True)
+
+
+@app.route("/")
+def home():
+    return render_template("index.html")
+
+
+@app.route("/projects")
+def projects():
+    files = os.listdir(PROJECTS_DIR)
+    return render_template("projects.html", projects=files)
+
+
+@app.route("/generate", methods=["POST"])
+def generate():
+    data = request.json
+    prompt = data.get("prompt")
+    model = data.get("model", "openai")
+
+    html = generate_website(prompt, model)
+
+    project_id = str(uuid.uuid4())
+    file_path = os.path.join(PROJECTS_DIR, f"{project_id}.html")
+
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(html)
+
+    return jsonify({
+        "html": html,
+        "project_id": project_id,
+        "url": f"/project/{project_id}"
+    })
+
+
+@app.route("/project/<project_id>")
+def view_project(project_id):
+    return send_from_directory(PROJECTS_DIR, f"{project_id}.html")
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
+📁 NOWY templates/projects.html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Projekty</title>
+</head>
+<body>
+
+<h2>📁 Twoje projekty</h2>
+
+<ul>
+{% for p in projects %}
+  <li>
+    <a href="/project/{{ p.replace('.html','') }}" target="_blank">
+      {{ p }}
+    </a>
+  </li>
+{% endfor %}
+</ul>
+
+<a href="/">← wróć</a>
+
+</body>
+</html>
+📁 UPDATE templates/index.html
+
+Dodaj link do projektów:
+
+<a href="/projects">📁 Moje projekty</a>
+📁 UPDATE static/app.js
+async function generate() {
+    const prompt = document.getElementById("prompt").value;
+    const model = document.getElementById("model").value;
+
+    const res = await fetch("/generate", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ prompt, model })
+    });
+
+    const data = await res.json();
+
+    document.getElementById("preview").srcdoc = data.html;
+
+    alert("✅ Projekt zapisany!\nLink: " + data.url);
+}

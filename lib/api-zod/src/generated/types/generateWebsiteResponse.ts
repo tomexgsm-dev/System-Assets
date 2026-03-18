@@ -7,6 +7,8 @@
  */
 
 export interface GenerateWebsiteResponse {
+  /** The unique ID of the saved generation */
+  id: number;
   /** The generated HTML for the website */
   html: string;
   /** The original prompt used */

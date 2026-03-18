@@ -1,8 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { 
-  useGenerateWebsite, 
-  useListGenerations, 
-  getListGenerationsQueryKey 
+import {
+  useGenerateWebsite,
+  useListGenerations,
+  getListGenerationsQueryKey,
 } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -16,20 +16,20 @@ export function useBuilderGenerate() {
 
   return useGenerateWebsite({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (data) => {
         queryClient.invalidateQueries({ queryKey: getListGenerationsQueryKey() });
-        toast({ 
-          title: "Success", 
-          description: "Website generated successfully!",
+        toast({
+          title: "Website generated!",
+          description: `Project saved. Open it at /api/project/${data.id}`,
         });
       },
       onError: (error: any) => {
-        toast({ 
-          title: "Generation Failed", 
-          description: error?.message || "An unexpected error occurred while generating the website.", 
-          variant: "destructive" 
+        toast({
+          title: "Generation Failed",
+          description: error?.message || "An unexpected error occurred while generating the website.",
+          variant: "destructive",
         });
-      }
-    }
+      },
+    },
   });
 }

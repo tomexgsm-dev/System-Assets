@@ -82,6 +82,9 @@ components:
     GenerateWebsiteResponse:
       type: object
       properties:
+        id:
+          type: integer
+          description: The unique ID of the saved generation
         html:
           type: string
           description: The generated HTML for the website
@@ -89,6 +92,7 @@ components:
           type: string
           description: The original prompt used
       required:
+        - id
         - html
         - prompt
     Generation:

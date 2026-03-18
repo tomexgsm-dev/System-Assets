@@ -27,6 +27,7 @@ export const GenerateWebsiteBody = zod.object({
 });
 
 export const GenerateWebsiteResponse = zod.object({
+  id: zod.number().describe("The unique ID of the saved generation"),
   html: zod.string().describe("The generated HTML for the website"),
   prompt: zod.string().describe("The original prompt used"),
 });

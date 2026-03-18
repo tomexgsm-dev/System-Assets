@@ -2,11 +2,10 @@ import { Router, type IRouter } from "express";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { db, generationsTable } from "@workspace/db";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import {
   GenerateWebsiteBody,
   GenerateWebsiteResponse,
-  ListGenerationsResponse,
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -30,10 +29,7 @@ async function generateWithOpenAI(prompt: string): Promise<string> {
     max_completion_tokens: 8192,
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
-      {
-        role: "user",
-        content: `Create a beautiful landing page for: ${prompt}`,
-      },
+      { role: "user", content: `Create a beautiful landing page for: ${prompt}` },
     ],
   });
   return completion.choices[0]?.message?.content ?? "";
@@ -44,12 +40,7 @@ async function generateWithClaude(prompt: string): Promise<string> {
     model: "claude-sonnet-4-6",
     max_tokens: 8192,
     system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: `Create a beautiful landing page for: ${prompt}`,
-      },
-    ],
+    messages: [{ role: "user", content: `Create a beautiful landing page for: ${prompt}` }],
   });
   const block = message.content[0];
   return block.type === "text" ? block.text : "";
@@ -61,7 +52,6 @@ function cleanHtml(raw: string): string {
     .replace(/^```\s*/i, "")
     .replace(/\s*```$/i, "")
     .trim();
-
   if (!html.toLowerCase().includes("<html")) {
     html = `<!DOCTYPE html><html><body>${html}</body></html>`;
   }
@@ -91,6 +81,7 @@ router.post("/generate", async (req, res) => {
       .returning();
 
     const response = GenerateWebsiteResponse.parse({
+      id: generation.id,
       html: generation.html,
       prompt: generation.prompt,
     });
@@ -110,7 +101,7 @@ router.get("/generations", async (_req, res) => {
       .orderBy(desc(generationsTable.createdAt))
       .limit(20);
 
-    const response = ListGenerationsResponse.parse(
+    res.json(
       generations.map((g) => ({
         id: g.id,
         prompt: g.prompt,
@@ -118,11 +109,35 @@ router.get("/generations", async (_req, res) => {
         createdAt: g.createdAt.toISOString(),
       }))
     );
-
-    res.json(response);
   } catch (err) {
-    console.error("List generations error:", err);
+    console.error("List generations error:", String(err));
     res.status(500).json({ error: "Failed to list generations" });
+  }
+});
+
+router.get("/project/:id", async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    res.status(400).send("<html><body>Invalid project ID</body></html>");
+    return;
+  }
+
+  try {
+    const [generation] = await db
+      .select()
+      .from(generationsTable)
+      .where(eq(generationsTable.id, id));
+
+    if (!generation) {
+      res.status(404).send("<html><body><h1>Project not found</h1></body></html>");
+      return;
+    }
+
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(generation.html);
+  } catch (err) {
+    console.error("View project error:", err);
+    res.status(500).send("<html><body>Error loading project</body></html>");
   }
 });
 

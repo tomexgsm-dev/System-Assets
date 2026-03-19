@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Copy, Check, LayoutTemplate, Monitor, Sparkles,
   ExternalLink, Download, FileCode2, Layers, Code2, Eye, Globe,
+  Rocket, X, Link,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { CodeEditor } from "@/components/CodeEditor";
@@ -41,6 +42,9 @@ export function BrowserPreview({
   const [viewMode, setViewMode] = useState<ViewMode>("preview");
   const [liveHtml, setLiveHtml] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState<string>("index.html");
+  const [publishState, setPublishState] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
+  const [showPublishModal, setShowPublishModal] = useState(false);
   const { toast } = useToast();
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -109,6 +113,40 @@ export function BrowserPreview({
     toast({ title: "Downloading ZIP...", description: "All project files bundled and downloading." });
   };
 
+  const handlePublish = async () => {
+    if (!currentId || publishState === "loading") return;
+    setPublishState("loading");
+    setPublishedUrl(null);
+    setShowPublishModal(true);
+
+    try {
+      const res = await fetch(`${BASE}/api/deploy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ generationId: currentId }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        if (data.error === "netlify_not_configured") {
+          setPublishState("error");
+          setPublishedUrl("__not_configured__");
+        } else {
+          throw new Error(data.message ?? data.error ?? "Deploy failed");
+        }
+        return;
+      }
+
+      setPublishedUrl(data.url);
+      setPublishState("done");
+    } catch (err: any) {
+      setPublishState("error");
+      setPublishedUrl(null);
+      toast({ title: "Publish failed", description: err?.message ?? "Unexpected error", variant: "destructive" });
+    }
+  };
+
   const phaseLabel   = PHASE_LABELS[progress.phase] ?? "Working...";
   const showProgress = progress.phase === "building" && progress.filesTotal > 0;
   const hasProject   = !!html && !!currentId && !isLoading;
@@ -167,6 +205,23 @@ export function BrowserPreview({
 
         {hasProject && viewMode === "preview" && (
           <div className="flex items-center gap-2">
+            {currentId && (
+              <button
+                onClick={handlePublish}
+                disabled={publishState === "loading"}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-violet-500/10 hover:bg-violet-500/20 text-violet-600 dark:text-violet-400 text-sm font-medium transition-colors border border-violet-500/20 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {publishState === "loading" ? (
+                  <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                ) : (
+                  <Rocket className="w-4 h-4" />
+                )}
+                {publishState === "loading" ? "Publishing..." : "Publish Live"}
+              </button>
+            )}
             {currentId && (
               <a
                 href={`${BASE}/api/project/${currentId}/${currentPage}`}
@@ -398,6 +453,128 @@ export function BrowserPreview({
                 />
               ) : null}
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Publish result modal */}
+      <AnimatePresence>
+        {showPublishModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            onClick={(e) => { if (e.target === e.currentTarget) setShowPublishModal(false); }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="bg-card border border-border/60 rounded-2xl shadow-2xl w-full max-w-md p-6 relative"
+            >
+              <button
+                onClick={() => setShowPublishModal(false)}
+                className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              {publishState === "loading" && (
+                <div className="flex flex-col items-center gap-4 py-4 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-violet-500/10 border border-violet-500/30 flex items-center justify-center">
+                    <Rocket className="w-8 h-8 text-violet-500 animate-bounce" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-foreground mb-1">Launching to Netlify…</h3>
+                    <p className="text-sm text-muted-foreground">Creating site, packaging files, deploying. This takes a few seconds.</p>
+                  </div>
+                  <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                    <motion.div
+                      className="h-full bg-violet-500 rounded-full"
+                      initial={{ width: "0%" }}
+                      animate={{ width: "90%" }}
+                      transition={{ duration: 4, ease: "easeInOut" }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {publishState === "done" && publishedUrl && publishedUrl !== "__not_configured__" && (
+                <div className="flex flex-col items-center gap-4 py-2 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-green-500/10 border border-green-500/30 flex items-center justify-center">
+                    <Globe className="w-8 h-8 text-green-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-foreground mb-1">Your site is live! 🎉</h3>
+                    <p className="text-sm text-muted-foreground mb-3">Deployed to Netlify and accessible worldwide.</p>
+                    <a
+                      href={publishedUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-green-500 hover:bg-green-600 text-white text-sm font-semibold transition-colors shadow-lg"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      Open Live Site
+                    </a>
+                  </div>
+                  <div className="w-full flex items-center gap-2 bg-muted/40 border border-border/50 rounded-xl px-3 py-2 mt-1">
+                    <Link className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <span className="text-xs text-muted-foreground truncate flex-1">{publishedUrl}</span>
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(publishedUrl!); toast({ title: "URL copied!" }); }}
+                      className="shrink-0 text-xs text-primary font-semibold hover:underline"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {publishState === "error" && publishedUrl === "__not_configured__" && (
+                <div className="flex flex-col items-center gap-4 py-2 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-orange-500/10 border border-orange-500/30 flex items-center justify-center">
+                    <Rocket className="w-8 h-8 text-orange-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-foreground mb-1">Netlify token not set</h3>
+                    <p className="text-sm text-muted-foreground">
+                      To publish sites live, add your{" "}
+                      <strong>Netlify Personal Access Token</strong> as the{" "}
+                      <code className="bg-muted px-1 py-0.5 rounded text-xs">NETLIFY_TOKEN</code>{" "}
+                      secret in the Replit Secrets panel, then try again.
+                    </p>
+                  </div>
+                  <a
+                    href="https://app.netlify.com/user/applications#personal-access-tokens"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-sm text-primary font-semibold hover:underline"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    Get your Netlify token
+                  </a>
+                </div>
+              )}
+
+              {publishState === "error" && publishedUrl !== "__not_configured__" && (
+                <div className="flex flex-col items-center gap-4 py-2 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center">
+                    <X className="w-8 h-8 text-red-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-foreground mb-1">Publish failed</h3>
+                    <p className="text-sm text-muted-foreground">Something went wrong while deploying. Check your Netlify token and try again.</p>
+                  </div>
+                  <button
+                    onClick={handlePublish}
+                    className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity"
+                  >
+                    Try again
+                  </button>
+                </div>
+              )}
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

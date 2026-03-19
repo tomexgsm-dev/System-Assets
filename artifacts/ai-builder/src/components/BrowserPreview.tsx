@@ -5,6 +5,7 @@ import {
   ExternalLink, Download, FileCode2, Layers, Code2, Eye, Globe,
   Rocket, X, Link, Crown, Blocks, MessageSquare, Wrench, Send,
   ChevronDown, ChevronUp, Bot, TrendingUp, Search, Lightbulb,
+  GripVertical, Plus, Trash2, PanelTop,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { CodeEditor } from "@/components/CodeEditor";
@@ -31,6 +32,67 @@ const PHASE_LABELS: Record<string, string> = {
 };
 
 type ViewMode = "preview" | "editor";
+
+// ── Section Builder templates ─────────────────────────────────────────────────
+const SECTION_TEMPLATES: Record<string, { name: string; icon: string; html: string }> = {
+  hero: {
+    name: "Hero", icon: "🦸",
+    html: `<section style="padding:80px 40px;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);text-align:center;color:white;font-family:sans-serif"><h1 style="font-size:2.5rem;margin:0 0 16px;font-weight:800">Your Headline Here</h1><p style="font-size:1.1rem;opacity:.8;max-width:600px;margin:0 auto 32px">A short description of your product or service. Make it compelling and clear.</p><a href="#" style="display:inline-block;background:#6d28d9;color:white;padding:14px 36px;border-radius:8px;text-decoration:none;font-weight:700;font-size:1rem">Get Started →</a></section>`,
+  },
+  features: {
+    name: "Features", icon: "⭐",
+    html: `<section style="padding:64px 40px;background:#f9fafb;font-family:sans-serif"><h2 style="text-align:center;font-size:2rem;font-weight:800;margin:0 0 40px;color:#111">Features</h2><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:24px;max-width:960px;margin:0 auto"><div style="background:white;padding:28px 24px;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.07)"><div style="font-size:2rem;margin-bottom:12px">⚡</div><h3 style="font-weight:700;margin:0 0 8px;color:#111">Lightning Fast</h3><p style="color:#666;font-size:.9rem;margin:0">Blazing performance for the best user experience.</p></div><div style="background:white;padding:28px 24px;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.07)"><div style="font-size:2rem;margin-bottom:12px">🔒</div><h3 style="font-weight:700;margin:0 0 8px;color:#111">Secure</h3><p style="color:#666;font-size:.9rem;margin:0">Enterprise-grade security built right in.</p></div><div style="background:white;padding:28px 24px;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.07)"><div style="font-size:2rem;margin-bottom:12px">📊</div><h3 style="font-weight:700;margin:0 0 8px;color:#111">Analytics</h3><p style="color:#666;font-size:.9rem;margin:0">Detailed insights and powerful reporting tools.</p></div><div style="background:white;padding:28px 24px;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.07)"><div style="font-size:2rem;margin-bottom:12px">🎨</div><h3 style="font-weight:700;margin:0 0 8px;color:#111">Customizable</h3><p style="color:#666;font-size:.9rem;margin:0">Tailor every aspect to fit your brand perfectly.</p></div></div></section>`,
+  },
+  pricing: {
+    name: "Pricing", icon: "💰",
+    html: `<section style="padding:64px 40px;background:white;font-family:sans-serif"><h2 style="text-align:center;font-size:2rem;font-weight:800;margin:0 0 40px;color:#111">Simple Pricing</h2><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:24px;max-width:820px;margin:0 auto"><div style="border:1px solid #e5e7eb;padding:32px 24px;border-radius:16px;text-align:center"><h3 style="font-weight:700;color:#111;margin:0 0 8px">Basic</h3><div style="font-size:2.5rem;font-weight:800;color:#6d28d9;margin-bottom:16px">$9<span style="font-size:1rem;color:#888;font-weight:400">/mo</span></div><ul style="list-style:none;padding:0;margin:0 0 24px;color:#555;font-size:.9rem;display:flex;flex-direction:column;gap:8px"><li>✓ 10 projects</li><li>✓ 5GB storage</li><li>✓ Email support</li></ul><a href="#" style="display:block;background:#6d28d9;color:white;padding:12px;border-radius:8px;text-decoration:none;font-weight:700">Get started</a></div><div style="border:2px solid #6d28d9;padding:32px 24px;border-radius:16px;text-align:center;background:#f5f3ff;position:relative"><div style="position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:#6d28d9;color:white;font-size:.75rem;padding:4px 14px;border-radius:20px;font-weight:700">POPULAR</div><h3 style="font-weight:700;color:#111;margin:0 0 8px">Pro</h3><div style="font-size:2.5rem;font-weight:800;color:#6d28d9;margin-bottom:16px">$29<span style="font-size:1rem;color:#888;font-weight:400">/mo</span></div><ul style="list-style:none;padding:0;margin:0 0 24px;color:#555;font-size:.9rem;display:flex;flex-direction:column;gap:8px"><li>✓ Unlimited projects</li><li>✓ 50GB storage</li><li>✓ Priority support</li></ul><a href="#" style="display:block;background:#6d28d9;color:white;padding:12px;border-radius:8px;text-decoration:none;font-weight:700">Get started</a></div><div style="border:1px solid #e5e7eb;padding:32px 24px;border-radius:16px;text-align:center"><h3 style="font-weight:700;color:#111;margin:0 0 8px">Enterprise</h3><div style="font-size:2.5rem;font-weight:800;color:#6d28d9;margin-bottom:16px">$99<span style="font-size:1rem;color:#888;font-weight:400">/mo</span></div><ul style="list-style:none;padding:0;margin:0 0 24px;color:#555;font-size:.9rem;display:flex;flex-direction:column;gap:8px"><li>✓ Everything in Pro</li><li>✓ Dedicated support</li><li>✓ Custom integrations</li></ul><a href="#" style="display:block;background:#6d28d9;color:white;padding:12px;border-radius:8px;text-decoration:none;font-weight:700">Contact sales</a></div></div></section>`,
+  },
+  testimonials: {
+    name: "Testimonials", icon: "💬",
+    html: `<section style="padding:64px 40px;background:#f9fafb;font-family:sans-serif"><h2 style="text-align:center;font-size:2rem;font-weight:800;margin:0 0 40px;color:#111">What People Say</h2><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px;max-width:960px;margin:0 auto"><div style="background:white;padding:28px 24px;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.06)"><p style="color:#555;margin:0 0 16px;font-style:italic;font-size:.95rem">"Absolutely amazing product. It changed how our whole team works."</p><div style="display:flex;align-items:center;gap:12px"><div style="width:40px;height:40px;border-radius:50%;background:#6d28d9;display:flex;align-items:center;justify-content:center;color:white;font-weight:700">A</div><div><div style="font-weight:700;color:#111">Anna K.</div><div style="color:#888;font-size:.8rem">CEO, StartupXYZ</div></div></div></div><div style="background:white;padding:28px 24px;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.06)"><p style="color:#555;margin:0 0 16px;font-style:italic;font-size:.95rem">"The best tool I've used in years. Highly recommended!"</p><div style="display:flex;align-items:center;gap:12px"><div style="width:40px;height:40px;border-radius:50%;background:#059669;display:flex;align-items:center;justify-content:center;color:white;font-weight:700">M</div><div><div style="font-weight:700;color:#111">Marek S.</div><div style="color:#888;font-size:.8rem">Founder, Agency</div></div></div></div><div style="background:white;padding:28px 24px;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.06)"><p style="color:#555;margin:0 0 16px;font-style:italic;font-size:.95rem">"Incredible support and incredible results within the first week."</p><div style="display:flex;align-items:center;gap:12px"><div style="width:40px;height:40px;border-radius:50%;background:#ea580c;display:flex;align-items:center;justify-content:center;color:white;font-weight:700">L</div><div><div style="font-weight:700;color:#111">Lisa T.</div><div style="color:#888;font-size:.8rem">Marketing Director</div></div></div></div></div></section>`,
+  },
+  contact: {
+    name: "Contact", icon: "📞",
+    html: `<section style="padding:64px 40px;background:white;font-family:sans-serif"><h2 style="text-align:center;font-size:2rem;font-weight:800;margin:0 0 40px;color:#111">Contact Us</h2><form style="max-width:520px;margin:0 auto;display:flex;flex-direction:column;gap:16px" onsubmit="event.preventDefault()"><input placeholder="Your Name" style="padding:13px 16px;border:1px solid #e5e7eb;border-radius:8px;font-size:1rem;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='#6d28d9'" onblur="this.style.borderColor='#e5e7eb'"><input type="email" placeholder="Email Address" style="padding:13px 16px;border:1px solid #e5e7eb;border-radius:8px;font-size:1rem;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='#6d28d9'" onblur="this.style.borderColor='#e5e7eb'"><input placeholder="Subject" style="padding:13px 16px;border:1px solid #e5e7eb;border-radius:8px;font-size:1rem;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='#6d28d9'" onblur="this.style.borderColor='#e5e7eb'"><textarea rows="4" placeholder="Your Message" style="padding:13px 16px;border:1px solid #e5e7eb;border-radius:8px;font-size:1rem;outline:none;resize:vertical;transition:border-color .2s;font-family:inherit" onfocus="this.style.borderColor='#6d28d9'" onblur="this.style.borderColor='#e5e7eb'"></textarea><button type="submit" style="background:#6d28d9;color:white;padding:14px;border:none;border-radius:8px;font-size:1rem;font-weight:700;cursor:pointer">Send Message ✉️</button></form></section>`,
+  },
+  faq: {
+    name: "FAQ", icon: "❓",
+    html: `<section style="padding:64px 40px;background:#f9fafb;font-family:sans-serif"><h2 style="text-align:center;font-size:2rem;font-weight:800;margin:0 0 40px;color:#111">Frequently Asked Questions</h2><div style="max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:12px"><details style="background:white;padding:20px 24px;border-radius:12px;border:1px solid #e5e7eb;cursor:pointer"><summary style="font-weight:700;font-size:1rem;color:#111;list-style:none;display:flex;justify-content:space-between;align-items:center">What is included in the free plan? <span style="font-size:1.2rem">+</span></summary><p style="margin:12px 0 0;color:#555;font-size:.95rem;line-height:1.6">The free plan includes up to 10 projects, 5GB of storage, and community support with a 99.9% uptime SLA.</p></details><details style="background:white;padding:20px 24px;border-radius:12px;border:1px solid #e5e7eb;cursor:pointer"><summary style="font-weight:700;font-size:1rem;color:#111;list-style:none;display:flex;justify-content:space-between;align-items:center">Can I upgrade or cancel at any time? <span style="font-size:1.2rem">+</span></summary><p style="margin:12px 0 0;color:#555;font-size:.95rem;line-height:1.6">Yes, you can upgrade, downgrade, or cancel your subscription at any time directly from your account dashboard.</p></details><details style="background:white;padding:20px 24px;border-radius:12px;border:1px solid #e5e7eb;cursor:pointer"><summary style="font-weight:700;font-size:1rem;color:#111;list-style:none;display:flex;justify-content:space-between;align-items:center">Do you offer a money-back guarantee? <span style="font-size:1.2rem">+</span></summary><p style="margin:12px 0 0;color:#555;font-size:.95rem;line-height:1.6">We offer a 30-day money-back guarantee on all paid plans, no questions asked.</p></details><details style="background:white;padding:20px 24px;border-radius:12px;border:1px solid #e5e7eb;cursor:pointer"><summary style="font-weight:700;font-size:1rem;color:#111;list-style:none;display:flex;justify-content:space-between;align-items:center">Is my data secure? <span style="font-size:1.2rem">+</span></summary><p style="margin:12px 0 0;color:#555;font-size:.95rem;line-height:1.6">Absolutely. All data is encrypted at rest and in transit using AES-256 and TLS 1.3.</p></details></div></section>`,
+  },
+  team: {
+    name: "Team", icon: "🧑‍💼",
+    html: `<section style="padding:64px 40px;background:white;font-family:sans-serif"><h2 style="text-align:center;font-size:2rem;font-weight:800;margin:0 0 40px;color:#111">Meet the Team</h2><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:32px;max-width:900px;margin:0 auto;text-align:center"><div><div style="width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#6d28d9,#7c3aed);margin:0 auto 16px;display:flex;align-items:center;justify-content:center;font-size:1.8rem">👨‍💼</div><h3 style="font-weight:700;margin:0 0 4px;color:#111">John Smith</h3><p style="color:#6d28d9;font-size:.9rem;margin:0 0 8px;font-weight:600">CEO & Co-founder</p><p style="color:#777;font-size:.85rem;margin:0">10+ years building great products.</p></div><div><div style="width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#059669,#10b981);margin:0 auto 16px;display:flex;align-items:center;justify-content:center;font-size:1.8rem">👩‍💻</div><h3 style="font-weight:700;margin:0 0 4px;color:#111">Sarah Lee</h3><p style="color:#059669;font-size:.9rem;margin:0 0 8px;font-weight:600">CTO & Co-founder</p><p style="color:#777;font-size:.85rem;margin:0">Full-stack engineer, open-source advocate.</p></div><div><div style="width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#ea580c,#f97316);margin:0 auto 16px;display:flex;align-items:center;justify-content:center;font-size:1.8rem">🎨</div><h3 style="font-weight:700;margin:0 0 4px;color:#111">Alex Kim</h3><p style="color:#ea580c;font-size:.9rem;margin:0 0 8px;font-weight:600">Head of Design</p><p style="color:#777;font-size:.85rem;margin:0">Turning ideas into pixel-perfect designs.</p></div></div></section>`,
+  },
+  gallery: {
+    name: "Gallery", icon: "📷",
+    html: `<section style="padding:64px 40px;background:#f9fafb;font-family:sans-serif"><h2 style="text-align:center;font-size:2rem;font-weight:800;margin:0 0 40px;color:#111">Gallery</h2><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;max-width:960px;margin:0 auto"><div style="background:#e5e7eb;border-radius:12px;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;font-size:3rem;overflow:hidden">🖼️</div><div style="background:#ddd6fe;border-radius:12px;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;font-size:3rem;overflow:hidden">🎨</div><div style="background:#d1fae5;border-radius:12px;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;font-size:3rem;overflow:hidden">📸</div><div style="background:#fee2e2;border-radius:12px;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;font-size:3rem;overflow:hidden">🌟</div><div style="background:#fef3c7;border-radius:12px;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;font-size:3rem;overflow:hidden">💡</div><div style="background:#e0f2fe;border-radius:12px;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;font-size:3rem;overflow:hidden">🚀</div></div></section>`,
+  },
+  footer: {
+    name: "Footer", icon: "🦶",
+    html: `<footer style="padding:48px 40px 24px;background:#111;color:white;font-family:sans-serif"><div style="max-width:960px;margin:0 auto"><div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:40px;margin-bottom:40px"><div><h3 style="font-weight:800;font-size:1.2rem;margin:0 0 12px">YourBrand</h3><p style="color:#9ca3af;font-size:.9rem;line-height:1.6;margin:0 0 16px">Building great products for great people. Join thousands of satisfied customers.</p></div><div><h4 style="font-weight:700;margin:0 0 12px;color:white">Product</h4><ul style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px"><li><a href="#" style="color:#9ca3af;text-decoration:none;font-size:.9rem">Features</a></li><li><a href="#" style="color:#9ca3af;text-decoration:none;font-size:.9rem">Pricing</a></li><li><a href="#" style="color:#9ca3af;text-decoration:none;font-size:.9rem">Changelog</a></li></ul></div><div><h4 style="font-weight:700;margin:0 0 12px;color:white">Company</h4><ul style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px"><li><a href="#" style="color:#9ca3af;text-decoration:none;font-size:.9rem">About</a></li><li><a href="#" style="color:#9ca3af;text-decoration:none;font-size:.9rem">Blog</a></li><li><a href="#" style="color:#9ca3af;text-decoration:none;font-size:.9rem">Careers</a></li></ul></div><div><h4 style="font-weight:700;margin:0 0 12px;color:white">Support</h4><ul style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px"><li><a href="#" style="color:#9ca3af;text-decoration:none;font-size:.9rem">Help Center</a></li><li><a href="#" style="color:#9ca3af;text-decoration:none;font-size:.9rem">Contact</a></li><li><a href="#" style="color:#9ca3af;text-decoration:none;font-size:.9rem">Privacy</a></li></ul></div></div><div style="border-top:1px solid #374151;padding-top:24px;text-align:center;color:#6b7280;font-size:.85rem">© 2024 YourBrand. All rights reserved.</div></div></footer>`,
+  },
+};
+
+const STRUCTURAL_TAGS = new Set(["section", "header", "footer", "nav", "main", "article"]);
+
+function parseStructuralSections(html: string): Array<{ name: string; tag: string; idx: number; preview: string }> {
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+    const children = Array.from(doc.body.children);
+    const result: Array<{ name: string; tag: string; idx: number; preview: string }> = [];
+    children.forEach((el, idx) => {
+      const tag = el.tagName.toLowerCase();
+      if (!STRUCTURAL_TAGS.has(tag) && !(tag === "div" && (el.id || el.className))) return;
+      const h = el.querySelector("h1, h2, h3");
+      const label = h?.textContent?.trim().slice(0, 36) ?? el.id ?? `${tag} ${result.length + 1}`;
+      result.push({ name: label, tag, idx, preview: el.outerHTML.slice(0, 60) });
+    });
+    return result;
+  } catch {
+    return [];
+  }
+}
 
 export function BrowserPreview({
   html,
@@ -73,6 +135,11 @@ export function BrowserPreview({
   const [seoState, setSeoState] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [seoSuggestState, setSeoSuggestState] = useState<"idle" | "loading">("idle");
   const [seoKeywords, setSeoKeywords] = useState<string[]>([]);
+
+  // ── Section Builder state ──
+  const [showSections, setShowSections] = useState(false);
+  const [dragSectionIdx, setDragSectionIdx] = useState<number | null>(null);
+  const [dragOverSectionIdx, setDragOverSectionIdx] = useState<number | null>(null);
 
   const { toast } = useToast();
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -357,6 +424,76 @@ export function BrowserPreview({
     }
   };
 
+  // ── Section Builder handlers ──
+  const handleAddSection = (type: string) => {
+    const tpl = SECTION_TEMPLATES[type];
+    if (!tpl) return;
+    const base = currentHtml || "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Page</title></head><body></body></html>";
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(base, "text/html");
+      const temp = doc.createElement("div");
+      temp.innerHTML = tpl.html;
+      while (temp.firstChild) doc.body.appendChild(temp.firstChild);
+      const newHtml = doc.documentElement.outerHTML;
+      setLiveHtml(newHtml);
+      onHtmlChange?.(newHtml);
+      toast({ title: `${tpl.icon} ${tpl.name} added!`, description: "Section appended to your page." });
+    } catch (err) {
+      toast({ title: "Failed to add section", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteSection = (globalIdx: number) => {
+    if (!currentHtml) return;
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(currentHtml, "text/html");
+      const children = Array.from(doc.body.children);
+      const structural = children.filter((el) => {
+        const tag = el.tagName.toLowerCase();
+        return STRUCTURAL_TAGS.has(tag) || (tag === "div" && (el.id || el.className));
+      });
+      const el = structural[globalIdx];
+      if (el) el.remove();
+      const newHtml = doc.documentElement.outerHTML;
+      setLiveHtml(newHtml);
+      onHtmlChange?.(newHtml);
+      toast({ title: "Section removed" });
+    } catch {
+      toast({ title: "Failed to remove section", variant: "destructive" });
+    }
+  };
+
+  const handleReorderSection = (fromIdx: number, toIdx: number) => {
+    if (fromIdx === toIdx || !currentHtml) return;
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(currentHtml, "text/html");
+      const children = Array.from(doc.body.children);
+      const structural = children.filter((el) => {
+        const tag = el.tagName.toLowerCase();
+        return STRUCTURAL_TAGS.has(tag) || (tag === "div" && (el.id || el.className));
+      });
+      if (fromIdx >= structural.length || toIdx >= structural.length) return;
+      const moved = structural.splice(fromIdx, 1)[0];
+      structural.splice(toIdx, 0, moved);
+      // Rebuild body: non-structural elements first, then reordered structural ones
+      const nonStructural = children.filter((el) => {
+        const tag = el.tagName.toLowerCase();
+        return !STRUCTURAL_TAGS.has(tag) && !(tag === "div" && (el.id || el.className));
+      });
+      while (doc.body.firstChild) doc.body.removeChild(doc.body.firstChild);
+      nonStructural.forEach((el) => doc.body.appendChild(el));
+      structural.forEach((el) => doc.body.appendChild(el));
+      const newHtml = doc.documentElement.outerHTML;
+      setLiveHtml(newHtml);
+      onHtmlChange?.(newHtml);
+    } catch {
+      toast({ title: "Failed to reorder sections", variant: "destructive" });
+    }
+  };
+
   const phaseLabel   = PHASE_LABELS[progress.phase] ?? "Working...";
   const showProgress = progress.phase === "building" && progress.filesTotal > 0;
   const hasProject   = !!html && !!currentId && !isLoading;
@@ -441,6 +578,22 @@ export function BrowserPreview({
               <TrendingUp className="w-3.5 h-3.5" />
               SEO
               {showSeo ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
+          )}
+
+          {/* Section Builder toggle */}
+          {hasProject && (
+            <button
+              onClick={() => setShowSections((v) => !v)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                showSections
+                  ? "bg-blue-500/20 border-blue-500/40 text-blue-400"
+                  : "bg-secondary/70 hover:bg-secondary border-border/50 text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <PanelTop className="w-3.5 h-3.5" />
+              Sections
+              {showSections ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
             </button>
           )}
         </div>
@@ -992,6 +1145,107 @@ export function BrowserPreview({
                   </a>
                 </div>
               </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Section Builder Panel ── */}
+      <AnimatePresence>
+        {showSections && hasProject && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="mt-3 rounded-2xl border border-blue-500/30 bg-card/80 backdrop-blur-sm overflow-hidden"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border/40 bg-blue-500/5">
+              <div className="flex items-center gap-2">
+                <PanelTop className="w-4 h-4 text-blue-400" />
+                <span className="text-sm font-semibold text-foreground">Section Builder</span>
+                <span className="text-xs text-muted-foreground hidden sm:inline">— add &amp; reorder page sections</span>
+              </div>
+            </div>
+
+            <div className="px-4 py-4 flex flex-col gap-4">
+              {/* Add section buttons */}
+              <div>
+                <p className="text-xs text-muted-foreground mb-2.5 flex items-center gap-1.5">
+                  <Plus className="w-3.5 h-3.5 text-blue-400" />
+                  Click to append a section to your page:
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(SECTION_TEMPLATES).map(([key, tpl]) => (
+                    <button
+                      key={key}
+                      onClick={() => handleAddSection(key)}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-secondary/70 hover:bg-blue-500/10 border border-border/50 hover:border-blue-500/30 text-xs text-muted-foreground hover:text-blue-300 transition-all font-medium"
+                    >
+                      <span>{tpl.icon}</span>
+                      {tpl.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Page structure / drag-drop list */}
+              {(() => {
+                const sections = parseStructuralSections(currentHtml || "");
+                return sections.length > 0 ? (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-2.5 flex items-center gap-1.5">
+                      <GripVertical className="w-3.5 h-3.5 text-blue-400" />
+                      Page structure — drag to reorder:
+                    </p>
+                    <div className="flex flex-col gap-1.5">
+                      {sections.map((sec, i) => (
+                        <div
+                          key={`${sec.idx}-${i}`}
+                          draggable
+                          onDragStart={() => setDragSectionIdx(i)}
+                          onDragOver={(e) => { e.preventDefault(); setDragOverSectionIdx(i); }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            if (dragSectionIdx !== null) {
+                              handleReorderSection(dragSectionIdx, i);
+                            }
+                            setDragSectionIdx(null);
+                            setDragOverSectionIdx(null);
+                          }}
+                          onDragEnd={() => { setDragSectionIdx(null); setDragOverSectionIdx(null); }}
+                          className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border text-xs transition-all cursor-grab active:cursor-grabbing ${
+                            dragOverSectionIdx === i && dragSectionIdx !== i
+                              ? "border-blue-500/60 bg-blue-500/10"
+                              : dragSectionIdx === i
+                              ? "opacity-40 border-dashed border-blue-500/30 bg-blue-500/5"
+                              : "border-border/40 bg-secondary/40 hover:bg-secondary/60"
+                          }`}
+                        >
+                          <GripVertical className="w-3.5 h-3.5 text-muted-foreground/50 shrink-0" />
+                          <span className="text-muted-foreground font-mono text-[10px] bg-secondary/60 px-1.5 py-0.5 rounded shrink-0 uppercase">
+                            {sec.tag}
+                          </span>
+                          <span className="flex-1 truncate text-foreground/80">{sec.name}</span>
+                          <span className="text-[10px] text-muted-foreground/40 shrink-0">#{i + 1}</span>
+                          <button
+                            onClick={() => handleDeleteSection(i)}
+                            className="shrink-0 p-1 rounded hover:bg-red-500/10 text-muted-foreground/40 hover:text-red-400 transition-colors"
+                            title="Remove section"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                    <LayoutTemplate className="w-3.5 h-3.5 text-blue-400/50" />
+                    No structural sections detected yet. Add one using the buttons above.
+                  </p>
+                );
+              })()}
             </div>
           </motion.div>
         )}

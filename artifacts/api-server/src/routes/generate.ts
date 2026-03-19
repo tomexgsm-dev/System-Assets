@@ -2,6 +2,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { rateLimit } from "express-rate-limit";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
+import OpenAI from "openai";
 import { db, generationsTable, usersTable } from "@workspace/db";
 import { desc, eq, count, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -53,6 +54,13 @@ setInterval(() => {
     if (task.createdAt < cutoff) tasks.delete(id);
   }
 }, 15 * 60 * 1000);
+
+// ─── Groq client (OpenAI-compatible) ─────────────────────────────────────────
+const groqClient = new OpenAI({
+  apiKey: process.env.GROQ_API_KEY ?? "",
+  baseURL: "https://api.groq.com/openai/v1",
+});
+const GROQ_MODEL = "llama-3.3-70b-versatile";
 
 // ─── System prompts ───────────────────────────────────────────────────────────
 const PLANNER_SYSTEM = `You are a senior software architect.
@@ -216,6 +224,46 @@ async function generateFileWithClaude(
   return content;
 }
 
+async function planWithGroq(prompt: string): Promise<Array<{name: string; description: string}>> {
+  const completion = await groqClient.chat.completions.create({
+    model: GROQ_MODEL,
+    max_tokens: 2048,
+    messages: [
+      { role: "system", content: PLANNER_SYSTEM },
+      { role: "user", content: `App idea: ${prompt}` },
+    ],
+  });
+  const raw = completion.choices[0]?.message?.content ?? "{}";
+  const parsed = JSON.parse(raw.replace(/^```json?\s*/i, "").replace(/\s*```$/i, "").trim());
+  return parsed.files ?? [];
+}
+
+async function generateFileWithGroq(
+  fileName: string,
+  description: string,
+  prompt: string,
+  htmlCtx?: HtmlContext
+): Promise<string> {
+  const isHtml = fileName.endsWith(".html");
+  const systemPrompt = isHtml && htmlCtx
+    ? HTML_SYSTEM(fileName, description, htmlCtx.cssFiles, htmlCtx.jsFiles, htmlCtx.allHtmlPages)
+    : FILE_SYSTEM(fileName, description);
+
+  const completion = await groqClient.chat.completions.create({
+    model: GROQ_MODEL,
+    max_tokens: 8192,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: `App idea: ${prompt}\nGenerate: ${fileName}` },
+    ],
+  });
+  const choice = completion.choices[0];
+  const content = choice?.message?.content ?? "";
+  console.log(`[Groq] ${fileName}: finish_reason=${choice?.finish_reason}, len=${content.length}`);
+  if (!content) console.warn(`[Groq] WARNING: empty content for ${fileName}`, JSON.stringify(choice));
+  return content;
+}
+
 // Fallback minimal HTML that links all project files — used if AI HTML generation fails.
 function buildFallbackHtml(
   description: string,
@@ -311,7 +359,7 @@ async function runGeneration(
   taskId: string,
   userId: number,
   prompt: string,
-  model: "openai" | "claude"
+  model: "openai" | "claude" | "groq"
 ) {
   try {
     // Step 1: Plan
@@ -319,6 +367,8 @@ async function runGeneration(
 
     const plan = model === "claude"
       ? await planWithClaude(prompt)
+      : model === "groq"
+      ? await planWithGroq(prompt)
       : await planWithOpenAI(prompt);
 
     if (!plan.length) throw new Error("Planner returned no files");
@@ -356,6 +406,8 @@ async function runGeneration(
 
       const rawContent = model === "claude"
         ? await generateFileWithClaude(file.name, file.description, prompt, file.name.endsWith(".html") ? htmlCtx : undefined)
+        : model === "groq"
+        ? await generateFileWithGroq(file.name, file.description, prompt, file.name.endsWith(".html") ? htmlCtx : undefined)
         : await generateFileWithOpenAI(file.name, file.description, prompt, file.name.endsWith(".html") ? htmlCtx : undefined);
 
       let content = stripCodeFences(rawContent);

@@ -7,7 +7,7 @@ import { AIProgressPanel } from "@/components/AIProgressPanel";
 import { useBuilderGenerate, useBuilderGenerations, type GenerationResult } from "@/hooks/use-builder";
 import { useAuth } from "@/hooks/use-auth";
 
-type Model = "openai" | "claude";
+type Model = "openai" | "claude" | "groq";
 
 export default function Home() {
   const [currentId, setCurrentId] = useState<number | undefined>();

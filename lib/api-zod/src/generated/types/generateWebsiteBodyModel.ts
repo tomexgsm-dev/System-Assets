@@ -15,4 +15,5 @@ export type GenerateWebsiteBodyModel =
 export const GenerateWebsiteBodyModel = {
   openai: "openai",
   claude: "claude",
+  groq: "groq",
 } as const;

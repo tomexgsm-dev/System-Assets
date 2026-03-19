@@ -411,6 +411,9 @@ importers:
       express-session:
         specifier: ^1.19.0
         version: 1.19.0
+      openai:
+        specifier: ^6.31.0
+        version: 6.31.0(ws@8.19.0)(zod@4.3.6)
       stripe:
         specifier: ^20.0.0
         version: 20.4.1(@types/node@25.3.5)

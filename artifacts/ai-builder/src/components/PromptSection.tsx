@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Sparkles, Loader2, Crown } from "lucide-react";
 
-type Model = "openai" | "claude";
+type Model = "openai" | "claude" | "groq";
 
 interface PromptSectionProps {
   onSubmit: (prompt: string, model: Model) => void;
@@ -14,6 +14,7 @@ interface PromptSectionProps {
 const MODEL_OPTIONS: { value: Model; label: string; badge: string; color: string }[] = [
   { value: "openai", label: "OpenAI GPT", badge: "GPT-5.2", color: "from-emerald-500 to-teal-500" },
   { value: "claude", label: "Claude", badge: "Sonnet 4.6", color: "from-orange-500 to-amber-500" },
+  { value: "groq", label: "Groq", badge: "Llama 3.3", color: "from-violet-500 to-purple-600" },
 ];
 
 export function PromptSection({ onSubmit, isLoading, currentPrompt, limitError, onUpgrade }: PromptSectionProps) {

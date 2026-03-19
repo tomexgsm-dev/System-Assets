@@ -549,11 +549,17 @@ async function runGeneration(
 
     const plannerSystemOverride = prevGen ? REFINE_PLANNER_SYSTEM(prevGen) : undefined;
 
+    // For reasoning models (GPT-5.2), system messages are deprioritised — embed
+    // the previous-site context in the user message as well so it is always seen.
+    const plannerPrompt = prevGen
+      ? `EXISTING SITE TO REFINE:\n- Original description: "${prevGen.prompt}"\n- Existing files: ${prevGen.files.map((f) => `${f.name}${f.description ? ` (${f.description})` : ""}`).join(", ")}\n\nRefinement instruction: ${prompt}`
+      : prompt;
+
     const plan = model === "claude"
-      ? await planWithClaude(prompt, plannerSystemOverride, img)
+      ? await planWithClaude(plannerPrompt, plannerSystemOverride, img)
       : model === "groq"
-      ? await planWithGroq(prompt, plannerSystemOverride, img)
-      : await planWithOpenAI(prompt, plannerSystemOverride, img);
+      ? await planWithGroq(plannerPrompt, plannerSystemOverride, img)
+      : await planWithOpenAI(plannerPrompt, plannerSystemOverride, img);
 
     if (!plan.length) throw new Error("Planner returned no files");
 

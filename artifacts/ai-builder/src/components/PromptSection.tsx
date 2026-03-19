@@ -132,14 +132,24 @@ export function PromptSection({ onSubmit, isLoading, currentPrompt, refineId, li
   };
 
   React.useEffect(() => {
-    if (currentPrompt && !isLoading) {
-      setPrompt(currentPrompt);
+    // In refine mode: clear the textarea so the user types ONLY the refinement instruction.
+    // In new-site mode: pre-fill with the last prompt so the user can iterate on it.
+    if (!isLoading) {
+      if (refineMode && refineId) {
+        setPrompt("");
+      } else if (currentPrompt) {
+        setPrompt(currentPrompt);
+      }
     }
   }, [currentPrompt, isLoading]);
 
   React.useEffect(() => {
-    if (refineId) setRefineMode(true);
-    else setRefineMode(false);
+    if (refineId) {
+      setRefineMode(true);
+      setPrompt(""); // clear textarea when a project is loaded for refining
+    } else {
+      setRefineMode(false);
+    }
   }, [refineId]);
 
   const selected = MODEL_OPTIONS.find((m) => m.value === model)!;

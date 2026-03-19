@@ -161,9 +161,9 @@ export function useBuilderGenerate() {
 
       const fileCount = data.files?.length;
       toast({
-        title: data.cached ? "Loaded from cache!" : "Website generated!",
+        title: data.cached ? "Showing saved version" : "Website generated!",
         description: data.cached
-          ? "Returned a previously generated version."
+          ? "This prompt was used before — showing the existing result. Change the prompt or use Refine to update it."
           : fileCount
           ? `Built ${fileCount} files — download the full project as a ZIP!`
           : `Project #${data.id} is ready.`,

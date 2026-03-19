@@ -645,7 +645,8 @@ router.post("/generate", generateRateLimit, async (req: any, res: Response) => {
   const plan = req.session.plan ?? "free";
 
   // ── Prompt cache: return existing generation for same prompt ────────────────
-  if (plan === "free") {
+  // Skip cache entirely when refining — we must generate fresh to apply changes.
+  if (plan === "free" && !refineFromId) {
     const [existing] = await db
       .select()
       .from(generationsTable)

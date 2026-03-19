@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Copy, Check, LayoutTemplate, Monitor, Sparkles,
   ExternalLink, Download, FileCode2, Layers, Code2, Eye, Globe,
-  Rocket, X, Link, Crown, Blocks,
+  Rocket, X, Link, Crown, Blocks, MessageSquare, Wrench, Send,
+  ChevronDown, ChevronUp, Bot,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { CodeEditor } from "@/components/CodeEditor";
@@ -56,6 +57,14 @@ export function BrowserPreview({
   const [wpTitle, setWpTitle] = useState("AI Page");
   const [wpPublishedUrl, setWpPublishedUrl] = useState<string | null>(null);
   const [wpError, setWpError] = useState<string | null>(null);
+
+  // ── AI Chat state ──
+  const [showChat, setShowChat] = useState(false);
+  type ChatMsg = { role: "user" | "ai"; text: string };
+  const [chatMessages, setChatMessages] = useState<ChatMsg[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   const { toast } = useToast();
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -194,6 +203,53 @@ export function BrowserPreview({
     }
   };
 
+  // ── AI Chat helpers ──
+  const currentHtml = liveHtml ?? html ?? "";
+
+  const sendChatMessage = async (msg: string, mode: "chat" | "fix" = "chat") => {
+    if (!msg.trim() || !currentHtml || chatLoading) return;
+
+    const userMsg: ChatMsg = { role: "user", text: msg };
+    setChatMessages((prev) => [...prev, userMsg]);
+    setChatInput("");
+    setChatLoading(true);
+
+    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+
+    try {
+      const res = await fetch(`${BASE}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ message: msg, html: currentHtml, mode }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Chat error");
+
+      const aiMsg: ChatMsg = { role: "ai", text: data.reply };
+      setChatMessages((prev) => [...prev, aiMsg]);
+
+      if (mode === "fix" && data.fixedHtml) {
+        setLiveHtml(data.fixedHtml);
+        onHtmlChange?.(data.fixedHtml);
+        toast({ title: "Code fixed!", description: "The AI applied fixes to your page." });
+      }
+    } catch (err: any) {
+      setChatMessages((prev) => [
+        ...prev,
+        { role: "ai", text: `❌ Error: ${err.message ?? String(err)}` },
+      ]);
+    } finally {
+      setChatLoading(false);
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    }
+  };
+
+  const handleFixCode = () => {
+    sendChatMessage("Fix all bugs and improve the code quality.", "fix");
+  };
+
   const phaseLabel   = PHASE_LABELS[progress.phase] ?? "Working...";
   const showProgress = progress.phase === "building" && progress.filesTotal > 0;
   const hasProject   = !!html && !!currentId && !isLoading;
@@ -247,6 +303,22 @@ export function BrowserPreview({
                 Edit Code
               </button>
             </div>
+          )}
+
+          {/* AI Chat toggle */}
+          {hasProject && (
+            <button
+              onClick={() => setShowChat((v) => !v)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                showChat
+                  ? "bg-violet-500/20 border-violet-500/40 text-violet-400"
+                  : "bg-secondary/70 hover:bg-secondary border-border/50 text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Bot className="w-3.5 h-3.5" />
+              AI Chat
+              {showChat ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
           )}
         </div>
 
@@ -508,6 +580,118 @@ export function BrowserPreview({
                   sandbox="allow-scripts allow-same-origin"
                 />
               ) : null}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── AI Chat Panel ── */}
+      <AnimatePresence>
+        {showChat && hasProject && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="mt-3 rounded-2xl border border-violet-500/30 bg-card/80 backdrop-blur-sm overflow-hidden"
+          >
+            {/* Chat header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border/40 bg-violet-500/5">
+              <div className="flex items-center gap-2">
+                <Bot className="w-4 h-4 text-violet-400" />
+                <span className="text-sm font-semibold text-foreground">AI Code Assistant</span>
+                <span className="text-xs text-muted-foreground">— ask about your page or let AI fix it</span>
+              </div>
+              <button
+                onClick={handleFixCode}
+                disabled={chatLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs font-semibold border border-amber-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {chatLoading ? (
+                  <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                ) : (
+                  <Wrench className="w-3.5 h-3.5" />
+                )}
+                Auto-fix code
+              </button>
+            </div>
+
+            {/* Messages */}
+            <div className="h-56 overflow-y-auto px-4 py-3 space-y-3 text-sm">
+              {chatMessages.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-full gap-2 text-center text-muted-foreground">
+                  <MessageSquare className="w-8 h-8 opacity-30" />
+                  <p className="text-xs">Ask anything about your website — why something doesn't work, how to improve it, or anything else.</p>
+                  <div className="flex flex-wrap gap-2 justify-center mt-1">
+                    {["Why doesn't the contact form work?", "How to add a dark mode?", "Fix navigation on mobile"].map((q) => (
+                      <button
+                        key={q}
+                        onClick={() => sendChatMessage(q)}
+                        disabled={chatLoading}
+                        className="text-xs px-2.5 py-1 rounded-full bg-secondary hover:bg-secondary/80 border border-border/50 text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {chatMessages.map((msg, i) => (
+                <div key={i} className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                  {msg.role === "ai" && (
+                    <div className="w-6 h-6 rounded-full bg-violet-500/20 border border-violet-500/30 flex items-center justify-center shrink-0 mt-0.5">
+                      <Bot className="w-3.5 h-3.5 text-violet-400" />
+                    </div>
+                  )}
+                  <div
+                    className={`max-w-[80%] rounded-xl px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap break-words ${
+                      msg.role === "user"
+                        ? "bg-violet-600/20 border border-violet-500/20 text-foreground"
+                        : "bg-secondary/80 border border-border/40 text-foreground"
+                    }`}
+                  >
+                    {msg.text}
+                  </div>
+                </div>
+              ))}
+              {chatLoading && (
+                <div className="flex gap-2 justify-start">
+                  <div className="w-6 h-6 rounded-full bg-violet-500/20 border border-violet-500/30 flex items-center justify-center shrink-0">
+                    <Bot className="w-3.5 h-3.5 text-violet-400" />
+                  </div>
+                  <div className="bg-secondary/80 border border-border/40 rounded-xl px-3 py-2">
+                    <div className="flex gap-1 items-center">
+                      <span className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                      <span className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                      <span className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Input row */}
+            <div className="px-4 py-3 border-t border-border/40 flex gap-2">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChatMessage(chatInput); } }}
+                placeholder="Ask AI about your website…"
+                disabled={chatLoading}
+                className="flex-1 text-sm bg-secondary/60 border border-border/50 rounded-xl px-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/20 disabled:opacity-50"
+              />
+              <button
+                onClick={() => sendChatMessage(chatInput)}
+                disabled={chatLoading || !chatInput.trim()}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+              >
+                <Send className="w-3.5 h-3.5" />
+                Send
+              </button>
             </div>
           </motion.div>
         )}

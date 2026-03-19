@@ -5,6 +5,7 @@ import authRouter from "./auth";
 import stripeRouter from "./stripe";
 import deployRouter from "./deploy";
 import styleRouter from "./style";
+import chatRouter from "./chat";
 
 const router: IRouter = Router();
 
@@ -14,5 +15,6 @@ router.use(generateRouter);
 router.use(stripeRouter);
 router.use(deployRouter);
 router.use(styleRouter);
+router.use(chatRouter);
 
 export default router;

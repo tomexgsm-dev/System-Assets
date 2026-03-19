@@ -1,0 +1,114 @@
+🧠 1. BACKEND — NOWY ENDPOINT /chat
+
+Dodaj do server.js:
+
+app.post("/chat", async (req, res) => {
+  const { message, html } = req.body;
+
+  const systemPrompt = `
+  Jesteś ekspertem frontend developerem i debugerem.
+  
+  Twoje zadania:
+  - analizujesz kod HTML/CSS/JS
+  - wykrywasz błędy
+  - tłumaczysz problem prostym językiem
+  - dajesz konkretne rozwiązania
+  
+  Odpowiadaj jasno:
+  1. Co jest problemem
+  2. Dlaczego
+  3. Jak to naprawić (kod)
+  `;
+
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: "llama3-70b-8192",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `Kod strony:\n${html}\n\nPytanie:\n${message}` }
+      ]
+    })
+  });
+
+  const data = await response.json();
+  res.json({ reply: data.choices[0].message.content });
+});
+🌐 2. FRONTEND — CZAT UI
+
+Dodaj do index.html:
+
+<div style="margin-top:20px;">
+  <h3>💬 Zapytaj AI o stronę</h3>
+  
+  <div id="chatBox" style="height:200px;overflow:auto;border:1px solid #333;padding:10px;"></div>
+  
+  <input id="chatInput" placeholder="Np. dlaczego koszyk nie działa?" style="width:80%;">
+  <button onclick="sendChat()">Wyślij</button>
+</div>
+⚙️ 3. JS — OBSŁUGA CZATU
+async function sendChat() {
+  const input = document.getElementById("chatInput");
+  const chatBox = document.getElementById("chatBox");
+
+  const msg = input.value;
+
+  chatBox.innerHTML += `<div>🧑: ${msg}</div>`;
+
+  const res = await fetch("http://localhost:3000/chat", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({
+      message: msg,
+      html: aiHTML
+    })
+  });
+
+  const data = await res.json();
+
+  chatBox.innerHTML += `<div>🤖: ${data.reply}</div>`;
+  input.value = "";
+}
+🔥 JAK TO DZIAŁA (PRZYKŁAD)
+
+User pyta:
+👉 „Dlaczego koszyk nie działa?”
+
+AI odpowiada:
+
+Problem:
+Koszyk nie działa, ponieważ nie ma logiki JavaScript do dodawania produktów.
+
+Dlaczego:
+HTML zawiera tylko przycisk, ale brak event listenera.
+
+Rozwiązanie:
+Dodaj JS:
+
+document.querySelector(".add-to-cart").addEventListener("click", () => {
+  cart.push(product);
+});
+💡 MEGA ULEPSZENIE (POLECAM)
+
+Dodaj przycisk:
+
+<button onclick="fixCode()">🔧 Napraw automatycznie</button>
+async function fixCode() {
+  const res = await fetch("http://localhost:3000/chat", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({
+      message: "Popraw cały kod i napraw błędy",
+      html: aiHTML
+    })
+  });
+
+  const data = await res.json();
+  aiHTML = data.reply;
+
+  document.getElementById("preview").srcdoc = aiHTML;
+}

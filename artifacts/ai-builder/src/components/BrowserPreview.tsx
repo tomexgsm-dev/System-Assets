@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Copy, Check, LayoutTemplate, Monitor, Sparkles,
   ExternalLink, Download, FileCode2, Layers, Code2, Eye, Globe,
-  Rocket, X, Link, Crown,
+  Rocket, X, Link, Crown, Blocks,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { CodeEditor } from "@/components/CodeEditor";
@@ -45,6 +45,17 @@ export function BrowserPreview({
   const [publishState, setPublishState] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
   const [showPublishModal, setShowPublishModal] = useState(false);
+
+  // WordPress publish state
+  const [showWpModal, setShowWpModal] = useState(false);
+  const [wpState, setWpState] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [wpUrl, setWpUrl] = useState("");
+  const [wpUser, setWpUser] = useState("");
+  const [wpPassword, setWpPassword] = useState("");
+  const [wpTitle, setWpTitle] = useState("AI Page");
+  const [wpPublishedUrl, setWpPublishedUrl] = useState<string | null>(null);
+  const [wpError, setWpError] = useState<string | null>(null);
+
   const { toast } = useToast();
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -151,6 +162,37 @@ export function BrowserPreview({
     }
   };
 
+  const handlePublishWP = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentId || wpState === "loading") return;
+    setWpState("loading");
+    setWpPublishedUrl(null);
+    setWpError(null);
+    try {
+      const res = await fetch(`${BASE}/api/deploy-wp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ generationId: currentId, wpUrl, wpUser, wpAppPassword: wpPassword, title: wpTitle }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (data.error === "publish_limit") {
+          setWpError("Limit publikacji osiągnięty. Przejdź na plan PRO.");
+        } else {
+          setWpError(data.message ?? "Błąd publikacji");
+        }
+        setWpState("error");
+        return;
+      }
+      setWpPublishedUrl(data.url);
+      setWpState("done");
+    } catch (err: any) {
+      setWpError(err?.message ?? "Nieoczekiwany błąd");
+      setWpState("error");
+    }
+  };
+
   const phaseLabel   = PHASE_LABELS[progress.phase] ?? "Working...";
   const showProgress = progress.phase === "building" && progress.filesTotal > 0;
   const hasProject   = !!html && !!currentId && !isLoading;
@@ -223,7 +265,16 @@ export function BrowserPreview({
                 ) : (
                   <Rocket className="w-4 h-4" />
                 )}
-                {publishState === "loading" ? "Publishing..." : "Publish Live"}
+                {publishState === "loading" ? "Publishing..." : "Netlify"}
+              </button>
+            )}
+            {currentId && (
+              <button
+                onClick={() => { setShowWpModal(true); setWpState("idle"); setWpPublishedUrl(null); setWpError(null); }}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 text-sm font-medium transition-colors border border-blue-500/20"
+              >
+                <Blocks className="w-4 h-4" />
+                WordPress
               </button>
             )}
             {currentId && (
@@ -461,7 +512,167 @@ export function BrowserPreview({
         )}
       </AnimatePresence>
 
-      {/* Publish result modal */}
+      {/* WordPress publish modal */}
+      <AnimatePresence>
+        {showWpModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            onClick={(e) => { if (e.target === e.currentTarget && wpState !== "loading") setShowWpModal(false); }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="bg-card border border-border/60 rounded-2xl shadow-2xl w-full max-w-md p-6 relative"
+            >
+              <button
+                onClick={() => setShowWpModal(false)}
+                disabled={wpState === "loading"}
+                className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              {wpState !== "done" && (
+                <>
+                  <div className="flex items-center gap-3 mb-5">
+                    <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
+                      <Blocks className="w-5 h-5 text-blue-500" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-foreground">Publikuj do WordPress</h3>
+                      <p className="text-xs text-muted-foreground">Wymagane Application Password z WP Admin</p>
+                    </div>
+                  </div>
+
+                  <form onSubmit={handlePublishWP} className="flex flex-col gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground mb-1 block">URL WordPressa</label>
+                      <input
+                        type="url"
+                        placeholder="https://mojwordpress.pl"
+                        value={wpUrl}
+                        onChange={(e) => setWpUrl(e.target.value)}
+                        required
+                        disabled={wpState === "loading"}
+                        className="w-full bg-background border border-border/60 rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 disabled:opacity-50"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground mb-1 block">Login WP</label>
+                      <input
+                        type="text"
+                        placeholder="admin"
+                        value={wpUser}
+                        onChange={(e) => setWpUser(e.target.value)}
+                        required
+                        disabled={wpState === "loading"}
+                        className="w-full bg-background border border-border/60 rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 disabled:opacity-50"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground mb-1 block">
+                        Application Password
+                        <a
+                          href="https://wordpress.org/documentation/article/application-passwords/"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ml-1.5 text-primary hover:underline font-normal"
+                        >
+                          (jak wygenerować?)
+                        </a>
+                      </label>
+                      <input
+                        type="password"
+                        placeholder="xxxx xxxx xxxx xxxx xxxx xxxx"
+                        value={wpPassword}
+                        onChange={(e) => setWpPassword(e.target.value)}
+                        required
+                        disabled={wpState === "loading"}
+                        className="w-full bg-background border border-border/60 rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 disabled:opacity-50"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground mb-1 block">Tytuł strony</label>
+                      <input
+                        type="text"
+                        placeholder="AI Page"
+                        value={wpTitle}
+                        onChange={(e) => setWpTitle(e.target.value)}
+                        disabled={wpState === "loading"}
+                        className="w-full bg-background border border-border/60 rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 disabled:opacity-50"
+                      />
+                    </div>
+
+                    {wpError && (
+                      <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-3 py-2 text-sm text-red-600 dark:text-red-400">
+                        {wpError}
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={wpState === "loading" || !wpUrl || !wpUser || !wpPassword}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed mt-1"
+                    >
+                      {wpState === "loading" ? (
+                        <>
+                          <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                          Publikowanie...
+                        </>
+                      ) : (
+                        <>
+                          <Blocks className="w-4 h-4" />
+                          Opublikuj w WordPress
+                        </>
+                      )}
+                    </button>
+                  </form>
+                </>
+              )}
+
+              {wpState === "done" && wpPublishedUrl && (
+                <div className="flex flex-col items-center gap-4 py-2 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-green-500/10 border border-green-500/30 flex items-center justify-center">
+                    <Globe className="w-8 h-8 text-green-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-foreground mb-1">Strona opublikowana! 🎉</h3>
+                    <p className="text-sm text-muted-foreground mb-3">Twoja strona jest już dostępna w WordPress.</p>
+                    <a
+                      href={wpPublishedUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-green-500 hover:bg-green-600 text-white text-sm font-semibold transition-colors shadow-lg"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      Otwórz stronę
+                    </a>
+                  </div>
+                  <div className="w-full flex items-center gap-2 bg-muted/40 border border-border/50 rounded-xl px-3 py-2">
+                    <Link className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <span className="text-xs text-muted-foreground truncate flex-1">{wpPublishedUrl}</span>
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(wpPublishedUrl!); toast({ title: "URL skopiowany!" }); }}
+                      className="shrink-0 text-xs text-primary font-semibold hover:underline"
+                    >
+                      Kopiuj
+                    </button>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Netlify publish result modal */}
       <AnimatePresence>
         {showPublishModal && (
           <motion.div

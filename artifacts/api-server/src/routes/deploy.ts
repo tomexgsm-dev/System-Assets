@@ -147,4 +147,96 @@ function buildZip(files: ProjectFile[]): Promise<Buffer> {
   });
 }
 
+// ─── POST /deploy-wp — publish a project to WordPress ────────────────────────
+router.post("/deploy-wp", async (req: any, res: Response) => {
+  if (!req.session?.userId) {
+    res.status(401).json({ error: "Login required" });
+    return;
+  }
+
+  const { generationId, wpUrl, wpUser, wpAppPassword, title = "AI Page" } = req.body;
+
+  if (!generationId || !wpUrl || !wpUser || !wpAppPassword) {
+    res.status(400).json({ error: "generationId, wpUrl, wpUser and wpAppPassword are required" });
+    return;
+  }
+
+  const userId = req.session.userId;
+
+  // Refresh plan from DB
+  const [userRow] = await db
+    .select({ plan: usersTable.plan, publishCount: usersTable.publishCount })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId))
+    .limit(1);
+
+  const plan = userRow?.plan ?? "free";
+
+  if (plan === "free" && userRow && userRow.publishCount >= FREE_PUBLISH_LIMIT) {
+    res.status(403).json({
+      error: "publish_limit",
+      message: `Free plan allows ${FREE_PUBLISH_LIMIT} published sites. Upgrade to PRO for unlimited publishing.`,
+    });
+    return;
+  }
+
+  // Load generation
+  const [gen] = await db
+    .select()
+    .from(generationsTable)
+    .where(and(eq(generationsTable.id, generationId), eq(generationsTable.userId, userId)))
+    .limit(1);
+
+  if (!gen) {
+    res.status(404).json({ error: "Generation not found" });
+    return;
+  }
+
+  // Use the inlined HTML (self-contained) for WordPress
+  const html = gen.html;
+
+  try {
+    const base = wpUrl.replace(/\/$/, "");
+    const auth = Buffer.from(`${wpUser}:${wpAppPassword}`).toString("base64");
+
+    const wpRes = await fetch(`${base}/wp-json/wp/v2/pages`, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${auth}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ title, content: html, status: "publish" }),
+    });
+
+    if (!wpRes.ok) {
+      const text = await wpRes.text();
+      console.error("[WordPress] publish failed:", wpRes.status, text);
+      let detail = `WordPress returned ${wpRes.status}`;
+      try {
+        const j = JSON.parse(text);
+        detail = j.message ?? j.code ?? detail;
+      } catch {}
+      res.status(502).json({ error: "wp_publish_failed", message: detail });
+      return;
+    }
+
+    const data = (await wpRes.json()) as { link?: string };
+    const liveUrl = data.link ?? base;
+
+    // Increment publish counter for free users
+    if (plan === "free") {
+      await db
+        .update(usersTable)
+        .set({ publishCount: sql`${usersTable.publishCount} + 1` })
+        .where(eq(usersTable.id, userId));
+    }
+
+    console.log(`[WordPress] deployed gen#${generationId} by user#${userId} → ${liveUrl}`);
+    res.json({ url: liveUrl });
+  } catch (err: any) {
+    console.error("[WordPress] unexpected error:", err?.message ?? err);
+    res.status(500).json({ error: "Deploy failed", message: err?.message ?? String(err) });
+  }
+});
+
 export default router;

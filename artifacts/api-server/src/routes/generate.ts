@@ -541,7 +541,8 @@ async function runGeneration(
   prompt: string,
   model: "openai" | "claude" | "groq",
   prevGen?: PreviousGeneration,
-  img?: ImageData
+  img?: ImageData,
+  refineFromId?: number
 ) {
   try {
     // Step 1: Plan — use refinement planner when previous context exists
@@ -645,11 +646,22 @@ async function runGeneration(
     const rawHtml = ensureFullHtml(htmlFile?.content ?? "<html><body><p>No HTML file generated</p></body></html>");
     const previewHtml = inlineAssetsIntoHtml(rawHtml, generatedFiles);
 
-    // Step 4: Save to DB
-    const [generation] = await db
-      .insert(generationsTable)
-      .values({ prompt, html: previewHtml, userId, files: generatedFiles })
-      .returning();
+    // Step 4: Save to DB — update existing row when refining, insert when new
+    let generation: typeof generationsTable.$inferSelect;
+    if (refineFromId) {
+      const [updated] = await db
+        .update(generationsTable)
+        .set({ prompt, html: previewHtml, files: generatedFiles })
+        .where(and(eq(generationsTable.id, refineFromId), eq(generationsTable.userId, userId)))
+        .returning();
+      generation = updated;
+    } else {
+      const [inserted] = await db
+        .insert(generationsTable)
+        .values({ prompt, html: previewHtml, userId, files: generatedFiles })
+        .returning();
+      generation = inserted;
+    }
 
     tasks.set(taskId, {
       status: "done",
@@ -778,7 +790,7 @@ router.post("/generate", generateRateLimit, async (req: any, res: Response) => {
   const taskId = randomUUID();
   tasks.set(taskId, { status: "pending", createdAt: Date.now() });
 
-  runGeneration(taskId, userId, prompt, model, prevGen, img);
+  runGeneration(taskId, userId, prompt, model, prevGen, img, refineFromId);
 
   res.json({ taskId, cached: false, isRefinement: !!prevGen });
 });

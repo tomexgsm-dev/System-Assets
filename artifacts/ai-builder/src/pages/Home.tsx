@@ -66,10 +66,11 @@ export default function Home() {
 
   const handleGenerate = (prompt: string, model: Model, refineFromId?: number, imageBase64?: string, imageMimeType?: string) => {
     autoLoadedRef.current = true;
+    // Always clear the preview so loading spinner shows immediately
+    setCurrentHtml(null);
+    setCurrentFiles(null);
     if (!refineFromId) {
       setCurrentId(undefined);
-      setCurrentHtml(null);
-      setCurrentFiles(null);
     }
     setCurrentPrompt(prompt);
     setLimitError(false);

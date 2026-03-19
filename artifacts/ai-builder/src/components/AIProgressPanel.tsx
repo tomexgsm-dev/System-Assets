@@ -57,7 +57,7 @@ export function AIProgressPanel({ progress }: Props) {
     }
 
     // New files completed
-    const newlyCompleted = completedFiles.filter((f) => !prevCompletedRef.current.includes(f));
+    const newlyCompleted = (completedFiles ?? []).filter((f) => !(prevCompletedRef.current ?? []).includes(f));
     for (const name of newlyCompleted) {
       const idx = (filePlan ?? []).findIndex((f) => f.name === name);
       const n = idx + 1;
@@ -83,8 +83,8 @@ export function AIProgressPanel({ progress }: Props) {
 
     prevPhaseRef.current = phase;
     prevCurrentFileRef.current = currentFile;
-    prevCompletedRef.current = completedFiles;
-  }, [phase, currentFile, completedFiles.length, filesDone]);
+    prevCompletedRef.current = completedFiles ?? [];
+  }, [phase, currentFile, (completedFiles ?? []).length, filesDone]);
 
   // Auto-scroll to bottom when new entries appear
   useEffect(() => {

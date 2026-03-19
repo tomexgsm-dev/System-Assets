@@ -51,8 +51,9 @@ export function BrowserPreview({
   const projectUrl = currentId ? `${BASE}/api/project/${currentId}` : null;
   const zipUrl     = currentId ? `${BASE}/api/project/${currentId}/zip` : null;
 
-  // The URL used for the iframe src (for saved multi-page projects)
-  const iframeSrc = currentId && !liveHtml
+  // The URL used for the iframe src (for saved multi-page projects).
+  // During loading we never use iframeSrc — we wait for data to arrive first.
+  const iframeSrc = currentId && !liveHtml && !isLoading && html
     ? `${BASE}/api/project/${currentId}/index.html`
     : null;
 

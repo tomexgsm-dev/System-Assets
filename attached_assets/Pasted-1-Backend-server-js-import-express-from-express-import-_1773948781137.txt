@@ -1,0 +1,80 @@
+1️⃣ Backend — server.js
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import { createClient } from "@supabase/supabase-js";
+
+dotenv.config();
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// Supabase client
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+
+// --- Sprawdzenie limitu ---
+async function checkLimit(userId) {
+  const { data, error } = await supabase
+    .from("users")
+    .select("plan, published_count")
+    .eq("id", userId)
+    .single();
+
+  if (error) throw new Error("Błąd Supabase");
+
+  // FREE max 3 publikacje
+  if (data.plan === "free" && data.published_count >= 3) return false;
+  return true;
+}
+
+// --- Zwiększenie licznika ---
+async function incrementCount(userId) {
+  await supabase
+    .from("users")
+    .update({ published_count: supabase.raw("published_count + 1") })
+    .eq("id", userId);
+}
+
+// --- Endpoint publikacji ---
+app.post("/deploy", async (req, res) => {
+  const { html, userId } = req.body;
+
+  try {
+    const allowed = await checkLimit(userId);
+
+    if (!allowed) {
+      return res.status(403).json({ error: "Limit publikacji osiągnięty 🔒" });
+    }
+
+    // Tutaj dodajesz kod deploy (Netlify / Vercel)
+    // Przykład tymczasowy:
+    const liveUrl = "https://przykladowa-strona.netlify.app";
+
+    // Zwiększamy licznik jeśli FREE
+    await incrementCount(userId);
+
+    res.json({ url: liveUrl });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.listen(3000, () => console.log("Server działa 🚀"));
+2️⃣ Frontend — wysyłka userId
+async function publish() {
+  const userId = window.userId; // ustaw po loginie Supabase
+  const res = await fetch("http://localhost:3000/deploy", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ html: aiMessage, userId })
+  });
+
+  const data = await res.json();
+
+  if (data.error) {
+    alert(data.error);
+  } else {
+    alert("Twoja strona live: " + data.url);
+  }
+}

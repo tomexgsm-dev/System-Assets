@@ -1,10 +1,12 @@
-import { Router, type IRouter, type Request, type Response } from "express";
+import { Router, type IRouter, type Response } from "express";
 import archiver from "archiver";
-import { db, generationsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { db, generationsTable, usersTable } from "@workspace/db";
+import { eq, and, sql } from "drizzle-orm";
 import type { ProjectFile } from "@workspace/db";
 
 const router: IRouter = Router();
+
+const FREE_PUBLISH_LIMIT = 3;
 
 // POST /api/deploy — publish a project to Netlify
 router.post("/deploy", async (req: any, res: Response) => {
@@ -29,7 +31,28 @@ router.post("/deploy", async (req: any, res: Response) => {
   }
 
   const userId = req.session.userId;
+  const plan = req.session.plan ?? "free";
 
+  // ── Free plan publish limit ────────────────────────────────────────────────
+  if (plan === "free") {
+    const [user] = await db
+      .select({ publishCount: usersTable.publishCount })
+      .from(usersTable)
+      .where(eq(usersTable.id, userId))
+      .limit(1);
+
+    if (user && user.publishCount >= FREE_PUBLISH_LIMIT) {
+      res.status(403).json({
+        error: "publish_limit",
+        message: `Free plan allows ${FREE_PUBLISH_LIMIT} published sites. Upgrade to PRO for unlimited publishing.`,
+        publishCount: user.publishCount,
+        limit: FREE_PUBLISH_LIMIT,
+      });
+      return;
+    }
+  }
+
+  // ── Load project files ─────────────────────────────────────────────────────
   const [gen] = await db
     .select()
     .from(generationsTable)
@@ -91,7 +114,15 @@ router.post("/deploy", async (req: any, res: Response) => {
     const deploy = (await deployRes.json()) as { deploy_ssl_url?: string; ssl_url?: string };
     const liveUrl = deploy.deploy_ssl_url ?? deploy.ssl_url ?? site.ssl_url ?? site.url;
 
-    console.log(`[Netlify] deployed ${generationId} → ${liveUrl}`);
+    // 4. Increment publish counter for free users
+    if (plan === "free") {
+      await db
+        .update(usersTable)
+        .set({ publishCount: sql`${usersTable.publishCount} + 1` })
+        .where(eq(usersTable.id, userId));
+    }
+
+    console.log(`[Netlify] deployed gen#${generationId} by user#${userId} → ${liveUrl}`);
     res.json({ url: liveUrl, siteId: site.id });
   } catch (err: any) {
     console.error("[Netlify] unexpected error:", err?.message ?? err);

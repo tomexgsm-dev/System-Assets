@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Copy, Check, LayoutTemplate, Monitor, Sparkles,
   ExternalLink, Download, FileCode2, Layers, Code2, Eye, Globe,
-  Rocket, X, Link,
+  Rocket, X, Link, Crown,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { CodeEditor } from "@/components/CodeEditor";
@@ -132,6 +132,9 @@ export function BrowserPreview({
         if (data.error === "netlify_not_configured") {
           setPublishState("error");
           setPublishedUrl("__not_configured__");
+        } else if (data.error === "publish_limit") {
+          setPublishState("error");
+          setPublishedUrl("__publish_limit__");
         } else {
           throw new Error(data.message ?? data.error ?? "Deploy failed");
         }
@@ -531,6 +534,27 @@ export function BrowserPreview({
                 </div>
               )}
 
+              {publishState === "error" && publishedUrl === "__publish_limit__" && (
+                <div className="flex flex-col items-center gap-4 py-2 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-orange-500/10 border border-orange-500/30 flex items-center justify-center">
+                    <Rocket className="w-8 h-8 text-orange-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-foreground mb-1">Free publish limit reached</h3>
+                    <p className="text-sm text-muted-foreground mb-3">
+                      The free plan allows <strong>3 published sites</strong>. Upgrade to PRO for unlimited one-click publishing at <strong>$9.99/month</strong>.
+                    </p>
+                    <a
+                      href="/dashboard"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold transition-colors shadow-lg"
+                    >
+                      <Crown className="w-4 h-4" />
+                      Upgrade to PRO
+                    </a>
+                  </div>
+                </div>
+              )}
+
               {publishState === "error" && publishedUrl === "__not_configured__" && (
                 <div className="flex flex-col items-center gap-4 py-2 text-center">
                   <div className="w-16 h-16 rounded-2xl bg-orange-500/10 border border-orange-500/30 flex items-center justify-center">
@@ -557,7 +581,7 @@ export function BrowserPreview({
                 </div>
               )}
 
-              {publishState === "error" && publishedUrl !== "__not_configured__" && (
+              {publishState === "error" && publishedUrl !== "__not_configured__" && publishedUrl !== "__publish_limit__" && (
                 <div className="flex flex-col items-center gap-4 py-2 text-center">
                   <div className="w-16 h-16 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center">
                     <X className="w-8 h-8 text-red-500" />

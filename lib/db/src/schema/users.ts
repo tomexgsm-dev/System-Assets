@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer } from "drizzle-orm/pg-core";
 
 export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -7,6 +7,7 @@ export const usersTable = pgTable("users", {
   plan: text("plan").notNull().default("free"),
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
+  publishCount: integer("publish_count").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

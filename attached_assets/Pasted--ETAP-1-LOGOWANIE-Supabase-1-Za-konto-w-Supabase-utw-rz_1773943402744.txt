@@ -1,0 +1,136 @@
+.
+
+🚀 ETAP 1 — LOGOWANIE (Supabase)
+👉 1. Załóż konto w Supabase
+
+utwórz projekt
+
+skopiuj:
+
+SUPABASE_URL
+
+SUPABASE_ANON_KEY
+
+👉 2. Dodaj do index.html
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+👉 3. Dodaj login (script.js)
+const supabase = window.supabase.createClient(
+  "TWOJ_URL",
+  "TWOJ_ANON_KEY"
+);
+
+async function login() {
+  const email = prompt("Podaj email");
+  const { error } = await supabase.auth.signInWithOtp({ email });
+
+  if (!error) alert("Sprawdź maila!");
+}
+
+👉 Dodaj przycisk:
+
+<button onclick="login()">Zaloguj</button>
+💸 ETAP 2 — SYSTEM FREE / PRO
+👉 W Supabase (tabela users)
+
+Dodaj tabelę:
+
+users
+- id
+- email
+- plan (free / pro)
+- limit (np. 10)
+👉 Ograniczenie zapytań (server.js)
+
+Dodaj prosty limit:
+
+let requests = {};
+
+app.post("/chat", async (req, res) => {
+  const user = req.body.user || "guest";
+
+  if (!requests[user]) requests[user] = 0;
+
+  if (requests[user] > 10) {
+    return res.json({ error: "Limit osiągnięty 💸" });
+  }
+
+  requests[user]++;
+💰 ETAP 3 — PŁATNOŚCI
+
+Najprościej:
+
+👉 użyj Stripe
+
+zakładasz konto
+
+tworzysz:
+
+produkt (np. 29zł/miesiąc)
+
+dostajesz link płatności
+
+👉 możesz na start:
+
+NIE robić integracji
+
+tylko dać przycisk:
+
+<a href="LINK_DO_STRIPE">
+  <button>Kup PRO 🚀</button>
+</a>
+🌍 ETAP 4 — PUBLIKACJA (NAJWAŻNIEJSZE)
+
+Masz 3 opcje:
+
+🔥 1. Replit
+
+kliknij Deploy
+
+masz publiczny link
+
+🔥 2. Vercel
+
+frontend → Vercel
+
+backend → Railway
+
+🔥 3. Railway
+
+wrzucasz backend
+
+działa 24/7
+
+🧠 ETAP 5 — PAMIĘĆ AI (🔥 ważne)
+
+Dodaj do server.js:
+
+let history = {};
+
+app.post("/chat", async (req, res) => {
+  const user = req.body.user || "guest";
+
+  if (!history[user]) history[user] = [];
+
+  history[user].push({ role: "user", content: req.body.message });
+
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: "llama3-70b-8192",
+      messages: history[user]
+    })
+  });
+
+  const data = await response.json();
+
+  history[user].push({
+    role: "assistant",
+    content: data.choices[0].message.content
+  });
+
+  res.json(data);
+});

@@ -1,12 +1,13 @@
 import React, { useState } from "react";
-import { Sparkles, Loader2, Crown } from "lucide-react";
+import { Sparkles, Loader2, Crown, Wand2, PlusCircle } from "lucide-react";
 
 type Model = "openai" | "claude" | "groq";
 
 interface PromptSectionProps {
-  onSubmit: (prompt: string, model: Model) => void;
+  onSubmit: (prompt: string, model: Model, refineFromId?: number) => void;
   isLoading: boolean;
   currentPrompt?: string;
+  refineId?: number;
   limitError?: boolean;
   onUpgrade?: () => void;
 }
@@ -17,14 +18,15 @@ const MODEL_OPTIONS: { value: Model; label: string; badge: string; color: string
   { value: "groq", label: "Groq", badge: "Llama 3.3", color: "from-violet-500 to-purple-600" },
 ];
 
-export function PromptSection({ onSubmit, isLoading, currentPrompt, limitError, onUpgrade }: PromptSectionProps) {
+export function PromptSection({ onSubmit, isLoading, currentPrompt, refineId, limitError, onUpgrade }: PromptSectionProps) {
   const [prompt, setPrompt] = useState("");
   const [model, setModel] = useState<Model>("openai");
+  const [refineMode, setRefineMode] = useState(true);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!prompt.trim() || isLoading) return;
-    onSubmit(prompt, model);
+    onSubmit(prompt, model, refineMode && refineId ? refineId : undefined);
   };
 
   React.useEffect(() => {
@@ -33,7 +35,14 @@ export function PromptSection({ onSubmit, isLoading, currentPrompt, limitError, 
     }
   }, [currentPrompt, isLoading]);
 
+  // Default to refine mode whenever a project is loaded
+  React.useEffect(() => {
+    if (refineId) setRefineMode(true);
+    else setRefineMode(false);
+  }, [refineId]);
+
   const selected = MODEL_OPTIONS.find((m) => m.value === model)!;
+  const isRefining = refineMode && !!refineId;
 
   return (
     <div className="w-full max-w-4xl mx-auto px-6 py-8 relative z-20">
@@ -63,12 +72,55 @@ export function PromptSection({ onSubmit, isLoading, currentPrompt, limitError, 
       <form onSubmit={handleSubmit} className="relative group">
         <div className="absolute -inset-1 bg-gradient-to-r from-primary/30 to-accent/30 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-500"></div>
         <div className="relative bg-card border border-border/50 rounded-2xl shadow-xl overflow-hidden focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/50 transition-all">
+          {/* Refine / New site banner */}
+          {refineId && (
+            <div className="flex items-center gap-1 px-4 pt-3 pb-0">
+              <div className="flex items-center rounded-lg border border-border/50 bg-muted/40 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setRefineMode(true)}
+                  disabled={isLoading}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-all disabled:opacity-50 ${
+                    isRefining
+                      ? "bg-card text-foreground shadow-sm border border-border/50"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Wand2 className="w-3 h-3" />
+                  Refine current site
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRefineMode(false)}
+                  disabled={isLoading}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-all disabled:opacity-50 ${
+                    !isRefining
+                      ? "bg-card text-foreground shadow-sm border border-border/50"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <PlusCircle className="w-3 h-3" />
+                  New site
+                </button>
+              </div>
+              {isRefining && (
+                <span className="text-xs text-muted-foreground ml-1">
+                  AI will remember the current website and apply your changes
+                </span>
+              )}
+            </div>
+          )}
+
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             disabled={isLoading || limitError}
-            placeholder="E.g. A sleek landing page for a futuristic AI SaaS startup with dark mode, glowing buttons, hero section, pricing, and CTA..."
-            className="w-full bg-transparent p-5 min-h-[120px] resize-none text-foreground placeholder:text-muted-foreground/60 focus:outline-none disabled:opacity-50 font-body text-base leading-relaxed"
+            placeholder={
+              isRefining
+                ? "E.g. Make the navbar dark, add a pricing section, change the color to blue..."
+                : "E.g. A sleek landing page for a futuristic AI SaaS startup with dark mode, glowing buttons, hero section, pricing, and CTA..."
+            }
+            className="w-full bg-transparent p-5 min-h-[110px] resize-none text-foreground placeholder:text-muted-foreground/60 focus:outline-none disabled:opacity-50 font-body text-base leading-relaxed"
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();
@@ -115,6 +167,8 @@ export function PromptSection({ onSubmit, isLoading, currentPrompt, limitError, 
               >
                 {isLoading ? (
                   <><Loader2 className="w-4 h-4 animate-spin" />Generating...</>
+                ) : isRefining ? (
+                  <><Wand2 className="w-4 h-4" />Refine Site</>
                 ) : (
                   <><Sparkles className="w-4 h-4" />Generate Site</>
                 )}

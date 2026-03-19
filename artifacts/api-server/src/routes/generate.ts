@@ -99,6 +99,101 @@ Rules:
 - For CSS: include responsive design, animations, custom properties, and modern styling
 - For JS: include full interactivity, event handlers, smooth scroll, and mobile menu support`;
 
+// ─── Refinement context builders ──────────────────────────────────────────────
+interface PreviousGeneration {
+  prompt: string;
+  files: ProjectFile[];
+}
+
+const REFINE_PLANNER_SYSTEM = (prev: PreviousGeneration) =>
+  `You are a senior software architect helping to REFINE and IMPROVE an existing website.
+
+PREVIOUS WEBSITE:
+- Original prompt: "${prev.prompt}"
+- Existing files: ${prev.files.map((f) => `${f.name} (${f.description ?? "no description"})`).join(", ")}
+
+TASK: Plan an UPDATED version of the same website based on the user's new instruction.
+Keep the same file names and structure unless the update explicitly requires new pages.
+
+Return ONLY valid JSON (no markdown, no explanation):
+{
+  "files": [
+    {"name": "index.html", "description": "Updated homepage with changes applied"},
+    ...
+  ]
+}
+
+Rules:
+- Keep the same HTML page names unless new pages are needed
+- Always include shared styles.css and app.js
+- Maximum 8 files total; HTML/CSS/JS only
+- Each file must reflect what changed vs the original`;
+
+const REFINE_FILE_SYSTEM = (
+  fileName: string,
+  description: string,
+  prevContent: string,
+  prevPrompt: string
+) =>
+  `You are a senior web developer REFINING an existing file.
+
+File: ${fileName}
+Updated purpose: ${description}
+Original website prompt: "${prevPrompt}"
+
+EXISTING CODE (study it carefully — keep structure, design system, and nav intact):
+\`\`\`
+${prevContent.slice(0, 6000)}
+\`\`\`
+
+Rules:
+- Return ONLY the updated raw code (no markdown, no fences, no explanation)
+- Apply ONLY the changes needed by the new instruction
+- Keep ALL existing design: colors, fonts, layout, components, navigation
+- Keep ALL existing pages linked in navigation
+- Do NOT regress any feature that already works
+- Make the requested changes look natural and consistent with the existing design`;
+
+const REFINE_HTML_SYSTEM = (
+  fileName: string,
+  description: string,
+  prevContent: string,
+  prevPrompt: string,
+  cssFiles: string[],
+  jsFiles: string[],
+  allHtmlPages: Array<{ name: string; description: string }>
+) => {
+  const navLinks = allHtmlPages
+    .map((p) => {
+      const label = p.name.replace(".html", "").replace(/[-_]/g, " ");
+      const isHome = p.name === "index.html";
+      return `${isHome ? "Home" : label.charAt(0).toUpperCase() + label.slice(1)} → ${p.name}`;
+    })
+    .join(", ");
+
+  return `You are a senior web developer REFINING an existing HTML page.
+
+File: ${fileName}
+Updated purpose: ${description}
+Original website prompt: "${prevPrompt}"
+
+CSS files (link ALL in <head>): ${cssFiles.join(", ")}
+JS files (include ALL before </body>): ${jsFiles.join(", ")}
+Navigation pages (ALL must appear in nav): ${navLinks}
+
+EXISTING HTML (apply only the requested changes — preserve structure and design):
+\`\`\`html
+${prevContent.slice(0, 6000)}
+\`\`\`
+
+Rules:
+- Return ONLY the raw updated HTML (no markdown, no fences, no explanation)
+- Keep the navigation bar with links to ALL pages listed above
+- Preserve the overall layout, color scheme, and visual design
+- Apply ONLY the changes described in the refinement instruction
+- All CSS/JS references must use relative paths`;
+};
+
 // HTML page generator — knows about ALL other pages and CSS/JS files for navigation.
 const HTML_SYSTEM = (
   fileName: string,
@@ -141,13 +236,13 @@ Rules:
 };
 
 // ─── AI helpers ───────────────────────────────────────────────────────────────
-async function planWithOpenAI(prompt: string): Promise<Array<{name: string; description: string}>> {
+async function planWithOpenAI(prompt: string, systemOverride?: string): Promise<Array<{name: string; description: string}>> {
   const completion = await openai.chat.completions.create({
     model: "gpt-5.2",
     max_completion_tokens: 1024,
     messages: [
-      { role: "system", content: PLANNER_SYSTEM },
-      { role: "user", content: `App idea: ${prompt}` },
+      { role: "system", content: systemOverride ?? PLANNER_SYSTEM },
+      { role: "user", content: `Instruction: ${prompt}` },
     ],
   } as any);
   const raw = completion.choices[0]?.message?.content ?? "{}";
@@ -155,12 +250,12 @@ async function planWithOpenAI(prompt: string): Promise<Array<{name: string; desc
   return parsed.files ?? [];
 }
 
-async function planWithClaude(prompt: string): Promise<Array<{name: string; description: string}>> {
+async function planWithClaude(prompt: string, systemOverride?: string): Promise<Array<{name: string; description: string}>> {
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 1024,
-    system: PLANNER_SYSTEM,
-    messages: [{ role: "user", content: `App idea: ${prompt}` }],
+    system: systemOverride ?? PLANNER_SYSTEM,
+    messages: [{ role: "user", content: `Instruction: ${prompt}` }],
   });
   const block = message.content[0];
   const raw = block.type === "text" ? block.text : "{}";
@@ -178,19 +273,21 @@ async function generateFileWithOpenAI(
   fileName: string,
   description: string,
   prompt: string,
-  htmlCtx?: HtmlContext
+  htmlCtx?: HtmlContext,
+  systemOverride?: string
 ): Promise<string> {
   const isHtml = fileName.endsWith(".html");
-  const systemPrompt = isHtml && htmlCtx
-    ? HTML_SYSTEM(fileName, description, htmlCtx.cssFiles, htmlCtx.jsFiles, htmlCtx.allHtmlPages)
-    : FILE_SYSTEM(fileName, description);
+  const systemPrompt = systemOverride
+    ?? (isHtml && htmlCtx
+      ? HTML_SYSTEM(fileName, description, htmlCtx.cssFiles, htmlCtx.jsFiles, htmlCtx.allHtmlPages)
+      : FILE_SYSTEM(fileName, description));
 
   const completion = await openai.chat.completions.create({
     model: "gpt-5.2",
     max_completion_tokens: 32000,
     messages: [
       { role: "system", content: systemPrompt },
-      { role: "user", content: `App idea: ${prompt}\nGenerate: ${fileName}` },
+      { role: "user", content: `Instruction: ${prompt}\nGenerate: ${fileName}` },
     ],
   } as any);
   const choice = completion.choices[0];
@@ -204,18 +301,20 @@ async function generateFileWithClaude(
   fileName: string,
   description: string,
   prompt: string,
-  htmlCtx?: HtmlContext
+  htmlCtx?: HtmlContext,
+  systemOverride?: string
 ): Promise<string> {
   const isHtml = fileName.endsWith(".html");
-  const systemPrompt = isHtml && htmlCtx
-    ? HTML_SYSTEM(fileName, description, htmlCtx.cssFiles, htmlCtx.jsFiles, htmlCtx.allHtmlPages)
-    : FILE_SYSTEM(fileName, description);
+  const systemPrompt = systemOverride
+    ?? (isHtml && htmlCtx
+      ? HTML_SYSTEM(fileName, description, htmlCtx.cssFiles, htmlCtx.jsFiles, htmlCtx.allHtmlPages)
+      : FILE_SYSTEM(fileName, description));
 
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 8192,
     system: systemPrompt,
-    messages: [{ role: "user", content: `App idea: ${prompt}\nGenerate: ${fileName}` }],
+    messages: [{ role: "user", content: `Instruction: ${prompt}\nGenerate: ${fileName}` }],
   });
   const block = message.content[0];
   const content = block.type === "text" ? block.text : "";
@@ -224,13 +323,13 @@ async function generateFileWithClaude(
   return content;
 }
 
-async function planWithGroq(prompt: string): Promise<Array<{name: string; description: string}>> {
+async function planWithGroq(prompt: string, systemOverride?: string): Promise<Array<{name: string; description: string}>> {
   const completion = await groqClient.chat.completions.create({
     model: GROQ_MODEL,
     max_tokens: 2048,
     messages: [
-      { role: "system", content: PLANNER_SYSTEM },
-      { role: "user", content: `App idea: ${prompt}` },
+      { role: "system", content: systemOverride ?? PLANNER_SYSTEM },
+      { role: "user", content: `Instruction: ${prompt}` },
     ],
   });
   const raw = completion.choices[0]?.message?.content ?? "{}";
@@ -242,12 +341,14 @@ async function generateFileWithGroq(
   fileName: string,
   description: string,
   prompt: string,
-  htmlCtx?: HtmlContext
+  htmlCtx?: HtmlContext,
+  systemOverride?: string
 ): Promise<string> {
   const isHtml = fileName.endsWith(".html");
-  const systemPrompt = isHtml && htmlCtx
-    ? HTML_SYSTEM(fileName, description, htmlCtx.cssFiles, htmlCtx.jsFiles, htmlCtx.allHtmlPages)
-    : FILE_SYSTEM(fileName, description);
+  const systemPrompt = systemOverride
+    ?? (isHtml && htmlCtx
+      ? HTML_SYSTEM(fileName, description, htmlCtx.cssFiles, htmlCtx.jsFiles, htmlCtx.allHtmlPages)
+      : FILE_SYSTEM(fileName, description));
 
   const completion = await groqClient.chat.completions.create({
     model: GROQ_MODEL,
@@ -359,17 +460,20 @@ async function runGeneration(
   taskId: string,
   userId: number,
   prompt: string,
-  model: "openai" | "claude" | "groq"
+  model: "openai" | "claude" | "groq",
+  prevGen?: PreviousGeneration
 ) {
   try {
-    // Step 1: Plan
+    // Step 1: Plan — use refinement planner when previous context exists
     tasks.set(taskId, { ...tasks.get(taskId)!, status: "planning" });
 
+    const plannerSystemOverride = prevGen ? REFINE_PLANNER_SYSTEM(prevGen) : undefined;
+
     const plan = model === "claude"
-      ? await planWithClaude(prompt)
+      ? await planWithClaude(prompt, plannerSystemOverride)
       : model === "groq"
-      ? await planWithGroq(prompt)
-      : await planWithOpenAI(prompt);
+      ? await planWithGroq(prompt, plannerSystemOverride)
+      : await planWithOpenAI(prompt, plannerSystemOverride);
 
     if (!plan.length) throw new Error("Planner returned no files");
 
@@ -404,11 +508,29 @@ async function runGeneration(
         currentFile: file.name,
       });
 
+      // When refining, build a custom system prompt that includes the previous file content
+      const isHtml = file.name.endsWith(".html");
+      const prevFileContent = prevGen?.files.find((f) => f.name === file.name)?.content;
+
+      let systemOverride: string | undefined;
+      if (prevGen && prevFileContent) {
+        systemOverride = isHtml
+          ? REFINE_HTML_SYSTEM(file.name, file.description, prevFileContent, prevGen.prompt, cssFiles, jsFiles, allHtmlPages)
+          : REFINE_FILE_SYSTEM(file.name, file.description, prevFileContent, prevGen.prompt);
+      }
+
+      // Use the system override when available; otherwise fall back to standard prompts
       const rawContent = model === "claude"
-        ? await generateFileWithClaude(file.name, file.description, prompt, file.name.endsWith(".html") ? htmlCtx : undefined)
+        ? systemOverride
+          ? await generateFileWithClaude(file.name, file.description, prompt, isHtml ? htmlCtx : undefined, systemOverride)
+          : await generateFileWithClaude(file.name, file.description, prompt, isHtml ? htmlCtx : undefined)
         : model === "groq"
-        ? await generateFileWithGroq(file.name, file.description, prompt, file.name.endsWith(".html") ? htmlCtx : undefined)
-        : await generateFileWithOpenAI(file.name, file.description, prompt, file.name.endsWith(".html") ? htmlCtx : undefined);
+        ? systemOverride
+          ? await generateFileWithGroq(file.name, file.description, prompt, isHtml ? htmlCtx : undefined, systemOverride)
+          : await generateFileWithGroq(file.name, file.description, prompt, isHtml ? htmlCtx : undefined)
+        : systemOverride
+        ? await generateFileWithOpenAI(file.name, file.description, prompt, isHtml ? htmlCtx : undefined, systemOverride)
+        : await generateFileWithOpenAI(file.name, file.description, prompt, isHtml ? htmlCtx : undefined);
 
       let content = stripCodeFences(rawContent);
 
@@ -482,7 +604,7 @@ router.post("/generate", generateRateLimit, async (req: any, res: Response) => {
     return;
   }
 
-  const { prompt, model = "openai" } = parsed.data;
+  const { prompt, model = "openai", refineFromId } = parsed.data;
   const userId = req.session.userId;
   const plan = req.session.plan ?? "free";
 
@@ -545,13 +667,28 @@ router.post("/generate", generateRateLimit, async (req: any, res: Response) => {
     }
   }
 
+  // ── Load previous generation for refinement mode ─────────────────────────
+  let prevGen: PreviousGeneration | undefined;
+  if (refineFromId) {
+    const [prev] = await db
+      .select()
+      .from(generationsTable)
+      .where(and(eq(generationsTable.id, refineFromId), eq(generationsTable.userId, userId)))
+      .limit(1);
+
+    if (prev) {
+      const prevFiles = (prev.files as ProjectFile[]) ?? [{ name: "index.html", content: prev.html, description: "Main page" }];
+      prevGen = { prompt: prev.prompt, files: prevFiles };
+    }
+  }
+
   // ── Create task and start background generation ────────────────────────────
   const taskId = randomUUID();
   tasks.set(taskId, { status: "pending", createdAt: Date.now() });
 
-  runGeneration(taskId, userId, prompt, model);
+  runGeneration(taskId, userId, prompt, model, prevGen);
 
-  res.json({ taskId, cached: false });
+  res.json({ taskId, cached: false, isRefinement: !!prevGen });
 });
 
 // ─── GET /status/:taskId — poll for task result ───────────────────────────────

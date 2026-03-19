@@ -24,6 +24,10 @@ export const GenerateWebsiteBody = zod.object({
     .enum(["openai", "claude", "groq"])
     .optional()
     .describe("AI model to use for generation"),
+  refineFromId: zod
+    .number()
+    .optional()
+    .describe("ID of an existing generation to refine/iterate on"),
 });
 
 export const GenerateWebsiteResponse = zod.object({

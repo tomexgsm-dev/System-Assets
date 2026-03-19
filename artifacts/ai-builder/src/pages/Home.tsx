@@ -64,17 +64,19 @@ export default function Home() {
     setLimitError(false);
   };
 
-  const handleGenerate = (prompt: string, model: Model) => {
+  const handleGenerate = (prompt: string, model: Model, refineFromId?: number) => {
     autoLoadedRef.current = true;
-    setCurrentId(undefined);
-    setCurrentHtml(null);
+    if (!refineFromId) {
+      setCurrentId(undefined);
+      setCurrentHtml(null);
+      setCurrentFiles(null);
+    }
     setCurrentPrompt(prompt);
-    setCurrentFiles(null);
     setLimitError(false);
     resetProgress();
 
     generateWebsite(
-      { data: { prompt, model } },
+      { data: { prompt, model, refineFromId } },
       {
         onSuccess: (data) => {
           setCurrentId(data.id);
@@ -113,6 +115,7 @@ export default function Home() {
           onSubmit={handleGenerate}
           isLoading={isPending}
           currentPrompt={currentPrompt}
+          refineId={currentId}
           limitError={limitError}
           onUpgrade={() => navigate("/dashboard")}
         />

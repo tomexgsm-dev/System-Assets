@@ -373,17 +373,33 @@ async function generateFileWithClaude(
   const imageNote = img ? "\nReference image attached — match its visual style, color palette, and layout." : "";
   const userText = `${prevBlock}Instruction: ${prompt}\nGenerate: ${fileName}${imageNote}`;
 
-  const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 8192,
-    system: systemPrompt,
-    messages: [{ role: "user", content: claudeUserContent(userText, img) }],
-  });
-  const block = message.content[0];
-  const content = block.type === "text" ? block.text : "";
-  console.log(`[Claude] ${fileName}: stop_reason=${message.stop_reason}, len=${content.length}`);
-  if (!content) console.warn(`[Claude] WARNING: empty content for ${fileName}`, JSON.stringify(message.content));
-  return content;
+  const MAX_RETRIES = 3;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const message = await anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 32000,
+        system: systemPrompt,
+        messages: [{ role: "user", content: claudeUserContent(userText, img) }],
+      });
+      const block = message.content[0];
+      const content = block.type === "text" ? block.text : "";
+      console.log(`[Claude] ${fileName}: stop_reason=${message.stop_reason}, len=${content.length}, attempt=${attempt}`);
+      if (!content) console.warn(`[Claude] WARNING: empty content for ${fileName}`);
+      return content;
+    } catch (err: any) {
+      const isTransient = err?.status === 529 || err?.status === 503 || err?.status === 429 || err?.error?.type === "overloaded_error";
+      console.warn(`[Claude] ${fileName} attempt ${attempt} failed: ${err?.message ?? err}`);
+      if (attempt < MAX_RETRIES && isTransient) {
+        const delay = attempt * 3000;
+        console.log(`[Claude] Retrying ${fileName} in ${delay}ms...`);
+        await new Promise((r) => setTimeout(r, delay));
+        continue;
+      }
+      throw err;
+    }
+  }
+  return "";
 }
 
 async function planWithGroq(prompt: string, systemOverride?: string, img?: ImageData): Promise<Array<{name: string; description: string}>> {
@@ -426,7 +442,7 @@ async function generateFileWithGroq(
 
   const completion = await groqClient.chat.completions.create({
     model: GROQ_MODEL,
-    max_tokens: 8192,
+    max_tokens: 16000,
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: openaiUserContent(userText, img) },
@@ -609,11 +625,17 @@ async function runGeneration(
       // Use the system override when available; pass prevFileContent into user message so
       // all models (including GPT-5.2 reasoning) always see the existing code to refine.
       const ctx = isHtml ? htmlCtx : undefined;
-      const rawContent = model === "claude"
-        ? await generateFileWithClaude(file.name, file.description, prompt, ctx, systemOverride, img, prevFileContent)
-        : model === "groq"
-        ? await generateFileWithGroq(file.name, file.description, prompt, ctx, systemOverride, img, prevFileContent)
-        : await generateFileWithOpenAI(file.name, file.description, prompt, ctx, systemOverride, img, prevFileContent);
+      let rawContent = "";
+      try {
+        rawContent = model === "claude"
+          ? await generateFileWithClaude(file.name, file.description, prompt, ctx, systemOverride, img, prevFileContent)
+          : model === "groq"
+          ? await generateFileWithGroq(file.name, file.description, prompt, ctx, systemOverride, img, prevFileContent)
+          : await generateFileWithOpenAI(file.name, file.description, prompt, ctx, systemOverride, img, prevFileContent);
+      } catch (fileErr: any) {
+        console.error(`[generator] File ${file.name} generation failed (${fileErr?.message ?? fileErr}), using fallback`);
+        rawContent = "";
+      }
 
       let content = stripCodeFences(rawContent);
 

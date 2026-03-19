@@ -96,10 +96,14 @@ router.get("/auth/me", async (req, res) => {
   try {
     const [user] = await db
       .select({
-        id:      usersTable.id,
-        email:   usersTable.email,
-        plan:    usersTable.plan,
-        credits: usersTable.credits,
+        id:                  usersTable.id,
+        email:               usersTable.email,
+        plan:                usersTable.plan,
+        credits:             usersTable.credits,
+        publishCount:        usersTable.publishCount,
+        dailyGenCount:       usersTable.dailyGenCount,
+        monthlyGenCount:     usersTable.monthlyGenCount,
+        stripeSubscriptionId: usersTable.stripeSubscriptionId,
       })
       .from(usersTable)
       .where(eq(usersTable.id, req.session.userId));

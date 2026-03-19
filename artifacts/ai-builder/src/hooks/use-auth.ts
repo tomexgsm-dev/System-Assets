@@ -6,6 +6,10 @@ export interface AuthUser {
   email: string;
   plan: "free" | "pro";
   credits?: number;
+  publishCount?: number;
+  dailyGenCount?: number;
+  monthlyGenCount?: number;
+  stripeSubscriptionId?: string | null;
 }
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");

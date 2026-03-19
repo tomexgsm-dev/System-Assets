@@ -150,32 +150,21 @@ Rules:
 const REFINE_FILE_SYSTEM = (
   fileName: string,
   description: string,
-  prevContent: string,
   prevPrompt: string
 ) =>
-  `You are a senior web developer REFINING an existing file.
-
-File: ${fileName}
-Updated purpose: ${description}
-Original website prompt: "${prevPrompt}"
-
-EXISTING CODE (study it carefully — keep structure, design system, and nav intact):
-\`\`\`
-${prevContent.slice(0, 6000)}
-\`\`\`
-
+  `You are a senior web developer REFINING an existing website file.
+File: ${fileName} | Purpose: ${description}
+Original website: "${prevPrompt}"
 Rules:
 - Return ONLY the updated raw code (no markdown, no fences, no explanation)
 - Apply ONLY the changes needed by the new instruction
 - Keep ALL existing design: colors, fonts, layout, components, navigation
-- Keep ALL existing pages linked in navigation
 - Do NOT regress any feature that already works
-- Make the requested changes look natural and consistent with the existing design`;
+- Make changes look natural and consistent with the existing design`;
 
 const REFINE_HTML_SYSTEM = (
   fileName: string,
   description: string,
-  prevContent: string,
   prevPrompt: string,
   cssFiles: string[],
   jsFiles: string[],
@@ -190,24 +179,15 @@ const REFINE_HTML_SYSTEM = (
     .join(", ");
 
   return `You are a senior web developer REFINING an existing HTML page.
-
-File: ${fileName}
-Updated purpose: ${description}
-Original website prompt: "${prevPrompt}"
-
+File: ${fileName} | Purpose: ${description}
+Original website: "${prevPrompt}"
 CSS files (link ALL in <head>): ${cssFiles.join(", ")}
 JS files (include ALL before </body>): ${jsFiles.join(", ")}
 Navigation pages (ALL must appear in nav): ${navLinks}
-
-EXISTING HTML (apply only the requested changes — preserve structure and design):
-\`\`\`html
-${prevContent.slice(0, 6000)}
-\`\`\`
-
 Rules:
 - Return ONLY the raw updated HTML (no markdown, no fences, no explanation)
-- Keep the navigation bar with links to ALL pages listed above
-- Preserve the overall layout, color scheme, and visual design
+- Keep the navigation bar with links to ALL pages above using relative hrefs
+- Preserve the overall layout, color scheme, and visual design exactly
 - Apply ONLY the changes described in the refinement instruction
 - All CSS/JS references must use relative paths`;
 };
@@ -341,7 +321,8 @@ async function generateFileWithOpenAI(
   prompt: string,
   htmlCtx?: HtmlContext,
   systemOverride?: string,
-  img?: ImageData
+  img?: ImageData,
+  prevContent?: string
 ): Promise<string> {
   const isHtml = fileName.endsWith(".html");
   const systemPrompt = systemOverride
@@ -349,9 +330,12 @@ async function generateFileWithOpenAI(
       ? HTML_SYSTEM(fileName, description, htmlCtx.cssFiles, htmlCtx.jsFiles, htmlCtx.allHtmlPages)
       : FILE_SYSTEM(fileName, description));
 
-  const userText = img
-    ? `Instruction: ${prompt}\nGenerate: ${fileName}\nReference image attached — match its visual style, color palette, and layout.`
-    : `Instruction: ${prompt}\nGenerate: ${fileName}`;
+  // For reasoning models like gpt-5.2, put previous content in user message so it's always seen
+  const prevBlock = prevContent
+    ? `EXISTING CODE TO REFINE (preserve structure and design — apply only minimal requested changes):\n\`\`\`\n${prevContent.slice(0, 20000)}\n\`\`\`\n\n`
+    : "";
+  const imageNote = img ? "\nReference image attached — match its visual style, color palette, and layout." : "";
+  const userText = `${prevBlock}Instruction: ${prompt}\nGenerate: ${fileName}${imageNote}`;
 
   const completion = await openai.chat.completions.create({
     model: "gpt-5.2",
@@ -374,7 +358,8 @@ async function generateFileWithClaude(
   prompt: string,
   htmlCtx?: HtmlContext,
   systemOverride?: string,
-  img?: ImageData
+  img?: ImageData,
+  prevContent?: string
 ): Promise<string> {
   const isHtml = fileName.endsWith(".html");
   const systemPrompt = systemOverride
@@ -382,9 +367,11 @@ async function generateFileWithClaude(
       ? HTML_SYSTEM(fileName, description, htmlCtx.cssFiles, htmlCtx.jsFiles, htmlCtx.allHtmlPages)
       : FILE_SYSTEM(fileName, description));
 
-  const userText = img
-    ? `Instruction: ${prompt}\nGenerate: ${fileName}\nReference image attached — match its visual style, color palette, and layout.`
-    : `Instruction: ${prompt}\nGenerate: ${fileName}`;
+  const prevBlock = prevContent
+    ? `EXISTING CODE TO REFINE (preserve structure and design — apply only minimal requested changes):\n\`\`\`\n${prevContent.slice(0, 20000)}\n\`\`\`\n\n`
+    : "";
+  const imageNote = img ? "\nReference image attached — match its visual style, color palette, and layout." : "";
+  const userText = `${prevBlock}Instruction: ${prompt}\nGenerate: ${fileName}${imageNote}`;
 
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
@@ -422,7 +409,8 @@ async function generateFileWithGroq(
   prompt: string,
   htmlCtx?: HtmlContext,
   systemOverride?: string,
-  img?: ImageData
+  img?: ImageData,
+  prevContent?: string
 ): Promise<string> {
   const isHtml = fileName.endsWith(".html");
   const systemPrompt = systemOverride
@@ -430,17 +418,18 @@ async function generateFileWithGroq(
       ? HTML_SYSTEM(fileName, description, htmlCtx.cssFiles, htmlCtx.jsFiles, htmlCtx.allHtmlPages)
       : FILE_SYSTEM(fileName, description));
 
+  const prevBlock = prevContent
+    ? `EXISTING CODE TO REFINE (preserve structure and design — apply only minimal requested changes):\n\`\`\`\n${prevContent.slice(0, 20000)}\n\`\`\`\n\n`
+    : "";
+  const imageNote = img ? "\nReference image attached — match its visual style, color palette, and layout." : "";
+  const userText = `${prevBlock}Instruction: ${prompt}\nGenerate: ${fileName}${imageNote}`;
+
   const completion = await groqClient.chat.completions.create({
     model: GROQ_MODEL,
     max_tokens: 8192,
     messages: [
       { role: "system", content: systemPrompt },
-      { role: "user", content: openaiUserContent(
-          img
-            ? `Instruction: ${prompt}\nGenerate: ${fileName}\nReference image attached — match its visual style, color palette, and layout.`
-            : `Instruction: ${prompt}\nGenerate: ${fileName}`,
-          img
-        ) },
+      { role: "user", content: openaiUserContent(userText, img) },
     ],
   });
   const choice = completion.choices[0];
@@ -479,7 +468,12 @@ ${jsScripts}
 }
 
 function stripCodeFences(code: string): string {
-  return code
+  const trimmed = code.trim();
+  // If the whole response is a fenced block, extract just the content
+  const fenceMatch = trimmed.match(/^```[\w]*\n([\s\S]*?)\n?```$/);
+  if (fenceMatch) return fenceMatch[1].trim();
+  // If there's a fence at start/end but not both (malformed), strip individually
+  return trimmed
     .replace(/^```[\w]*\s*/i, "")
     .replace(/\s*```$/i, "")
     .trim();
@@ -594,24 +588,25 @@ async function runGeneration(
         currentFile: file.name,
       });
 
-      // When refining, build a custom system prompt that includes the previous file content
+      // When refining, build a custom system prompt + pass previous content to user message
       const isHtml = file.name.endsWith(".html");
       const prevFileContent = prevGen?.files.find((f) => f.name === file.name)?.content;
 
       let systemOverride: string | undefined;
-      if (prevGen && prevFileContent) {
+      if (prevGen) {
         systemOverride = isHtml
-          ? REFINE_HTML_SYSTEM(file.name, file.description, prevFileContent, prevGen.prompt, cssFiles, jsFiles, allHtmlPages)
-          : REFINE_FILE_SYSTEM(file.name, file.description, prevFileContent, prevGen.prompt);
+          ? REFINE_HTML_SYSTEM(file.name, file.description, prevGen.prompt, cssFiles, jsFiles, allHtmlPages)
+          : REFINE_FILE_SYSTEM(file.name, file.description, prevGen.prompt);
       }
 
-      // Use the system override when available; otherwise fall back to standard prompts
+      // Use the system override when available; pass prevFileContent into user message so
+      // all models (including GPT-5.2 reasoning) always see the existing code to refine.
       const ctx = isHtml ? htmlCtx : undefined;
       const rawContent = model === "claude"
-        ? await generateFileWithClaude(file.name, file.description, prompt, ctx, systemOverride, img)
+        ? await generateFileWithClaude(file.name, file.description, prompt, ctx, systemOverride, img, prevFileContent)
         : model === "groq"
-        ? await generateFileWithGroq(file.name, file.description, prompt, ctx, systemOverride, img)
-        : await generateFileWithOpenAI(file.name, file.description, prompt, ctx, systemOverride, img);
+        ? await generateFileWithGroq(file.name, file.description, prompt, ctx, systemOverride, img, prevFileContent)
+        : await generateFileWithOpenAI(file.name, file.description, prompt, ctx, systemOverride, img, prevFileContent);
 
       let content = stripCodeFences(rawContent);
 

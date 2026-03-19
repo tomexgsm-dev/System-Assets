@@ -271,14 +271,41 @@ Before </body>:
 - Use ONLY relative paths — never absolute paths starting with /`;
 };
 
+// ─── Image data helper ────────────────────────────────────────────────────────
+interface ImageData {
+  base64: string;
+  mimeType: string;
+}
+
+/** Build an OpenAI-compatible vision user message content array */
+function openaiUserContent(text: string, img?: ImageData): any {
+  if (!img) return text;
+  return [
+    { type: "text", text },
+    { type: "image_url", image_url: { url: `data:${img.mimeType};base64,${img.base64}`, detail: "high" } },
+  ];
+}
+
+/** Build a Claude vision user message content array */
+function claudeUserContent(text: string, img?: ImageData): any {
+  if (!img) return text;
+  return [
+    { type: "image", source: { type: "base64", media_type: img.mimeType as any, data: img.base64 } },
+    { type: "text", text },
+  ];
+}
+
 // ─── AI helpers ───────────────────────────────────────────────────────────────
-async function planWithOpenAI(prompt: string, systemOverride?: string): Promise<Array<{name: string; description: string}>> {
+async function planWithOpenAI(prompt: string, systemOverride?: string, img?: ImageData): Promise<Array<{name: string; description: string}>> {
   const completion = await openai.chat.completions.create({
     model: "gpt-5.2",
     max_completion_tokens: 1024,
     messages: [
       { role: "system", content: systemOverride ?? PLANNER_SYSTEM },
-      { role: "user", content: `Instruction: ${prompt}` },
+      { role: "user", content: openaiUserContent(
+          img ? `Instruction: ${prompt}\nIMPORTANT: The user has attached a reference image. Plan pages that match the style and content visible in the image.` : `Instruction: ${prompt}`,
+          img
+        ) },
     ],
   } as any);
   const raw = completion.choices[0]?.message?.content ?? "{}";
@@ -286,12 +313,15 @@ async function planWithOpenAI(prompt: string, systemOverride?: string): Promise<
   return parsed.files ?? [];
 }
 
-async function planWithClaude(prompt: string, systemOverride?: string): Promise<Array<{name: string; description: string}>> {
+async function planWithClaude(prompt: string, systemOverride?: string, img?: ImageData): Promise<Array<{name: string; description: string}>> {
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 1024,
     system: systemOverride ?? PLANNER_SYSTEM,
-    messages: [{ role: "user", content: `Instruction: ${prompt}` }],
+    messages: [{ role: "user", content: claudeUserContent(
+      img ? `Instruction: ${prompt}\nIMPORTANT: The user has attached a reference image. Plan pages that match the style and content visible in the image.` : `Instruction: ${prompt}`,
+      img
+    ) }],
   });
   const block = message.content[0];
   const raw = block.type === "text" ? block.text : "{}";
@@ -310,7 +340,8 @@ async function generateFileWithOpenAI(
   description: string,
   prompt: string,
   htmlCtx?: HtmlContext,
-  systemOverride?: string
+  systemOverride?: string,
+  img?: ImageData
 ): Promise<string> {
   const isHtml = fileName.endsWith(".html");
   const systemPrompt = systemOverride
@@ -318,12 +349,16 @@ async function generateFileWithOpenAI(
       ? HTML_SYSTEM(fileName, description, htmlCtx.cssFiles, htmlCtx.jsFiles, htmlCtx.allHtmlPages)
       : FILE_SYSTEM(fileName, description));
 
+  const userText = img
+    ? `Instruction: ${prompt}\nGenerate: ${fileName}\nReference image attached — match its visual style, color palette, and layout.`
+    : `Instruction: ${prompt}\nGenerate: ${fileName}`;
+
   const completion = await openai.chat.completions.create({
     model: "gpt-5.2",
     max_completion_tokens: 32000,
     messages: [
       { role: "system", content: systemPrompt },
-      { role: "user", content: `Instruction: ${prompt}\nGenerate: ${fileName}` },
+      { role: "user", content: openaiUserContent(userText, img) },
     ],
   } as any);
   const choice = completion.choices[0];
@@ -338,7 +373,8 @@ async function generateFileWithClaude(
   description: string,
   prompt: string,
   htmlCtx?: HtmlContext,
-  systemOverride?: string
+  systemOverride?: string,
+  img?: ImageData
 ): Promise<string> {
   const isHtml = fileName.endsWith(".html");
   const systemPrompt = systemOverride
@@ -346,11 +382,15 @@ async function generateFileWithClaude(
       ? HTML_SYSTEM(fileName, description, htmlCtx.cssFiles, htmlCtx.jsFiles, htmlCtx.allHtmlPages)
       : FILE_SYSTEM(fileName, description));
 
+  const userText = img
+    ? `Instruction: ${prompt}\nGenerate: ${fileName}\nReference image attached — match its visual style, color palette, and layout.`
+    : `Instruction: ${prompt}\nGenerate: ${fileName}`;
+
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 8192,
     system: systemPrompt,
-    messages: [{ role: "user", content: `Instruction: ${prompt}\nGenerate: ${fileName}` }],
+    messages: [{ role: "user", content: claudeUserContent(userText, img) }],
   });
   const block = message.content[0];
   const content = block.type === "text" ? block.text : "";
@@ -359,13 +399,16 @@ async function generateFileWithClaude(
   return content;
 }
 
-async function planWithGroq(prompt: string, systemOverride?: string): Promise<Array<{name: string; description: string}>> {
+async function planWithGroq(prompt: string, systemOverride?: string, img?: ImageData): Promise<Array<{name: string; description: string}>> {
   const completion = await groqClient.chat.completions.create({
     model: GROQ_MODEL,
     max_tokens: 2048,
     messages: [
       { role: "system", content: systemOverride ?? PLANNER_SYSTEM },
-      { role: "user", content: `Instruction: ${prompt}` },
+      { role: "user", content: openaiUserContent(
+          img ? `Instruction: ${prompt}\nIMPORTANT: The user has attached a reference image. Plan pages that match the style and content visible in the image.` : `Instruction: ${prompt}`,
+          img
+        ) },
     ],
   });
   const raw = completion.choices[0]?.message?.content ?? "{}";
@@ -378,7 +421,8 @@ async function generateFileWithGroq(
   description: string,
   prompt: string,
   htmlCtx?: HtmlContext,
-  systemOverride?: string
+  systemOverride?: string,
+  img?: ImageData
 ): Promise<string> {
   const isHtml = fileName.endsWith(".html");
   const systemPrompt = systemOverride
@@ -391,7 +435,12 @@ async function generateFileWithGroq(
     max_tokens: 8192,
     messages: [
       { role: "system", content: systemPrompt },
-      { role: "user", content: `App idea: ${prompt}\nGenerate: ${fileName}` },
+      { role: "user", content: openaiUserContent(
+          img
+            ? `Instruction: ${prompt}\nGenerate: ${fileName}\nReference image attached — match its visual style, color palette, and layout.`
+            : `Instruction: ${prompt}\nGenerate: ${fileName}`,
+          img
+        ) },
     ],
   });
   const choice = completion.choices[0];
@@ -497,7 +546,8 @@ async function runGeneration(
   userId: number,
   prompt: string,
   model: "openai" | "claude" | "groq",
-  prevGen?: PreviousGeneration
+  prevGen?: PreviousGeneration,
+  img?: ImageData
 ) {
   try {
     // Step 1: Plan — use refinement planner when previous context exists
@@ -506,10 +556,10 @@ async function runGeneration(
     const plannerSystemOverride = prevGen ? REFINE_PLANNER_SYSTEM(prevGen) : undefined;
 
     const plan = model === "claude"
-      ? await planWithClaude(prompt, plannerSystemOverride)
+      ? await planWithClaude(prompt, plannerSystemOverride, img)
       : model === "groq"
-      ? await planWithGroq(prompt, plannerSystemOverride)
-      : await planWithOpenAI(prompt, plannerSystemOverride);
+      ? await planWithGroq(prompt, plannerSystemOverride, img)
+      : await planWithOpenAI(prompt, plannerSystemOverride, img);
 
     if (!plan.length) throw new Error("Planner returned no files");
 
@@ -556,17 +606,12 @@ async function runGeneration(
       }
 
       // Use the system override when available; otherwise fall back to standard prompts
+      const ctx = isHtml ? htmlCtx : undefined;
       const rawContent = model === "claude"
-        ? systemOverride
-          ? await generateFileWithClaude(file.name, file.description, prompt, isHtml ? htmlCtx : undefined, systemOverride)
-          : await generateFileWithClaude(file.name, file.description, prompt, isHtml ? htmlCtx : undefined)
+        ? await generateFileWithClaude(file.name, file.description, prompt, ctx, systemOverride, img)
         : model === "groq"
-        ? systemOverride
-          ? await generateFileWithGroq(file.name, file.description, prompt, isHtml ? htmlCtx : undefined, systemOverride)
-          : await generateFileWithGroq(file.name, file.description, prompt, isHtml ? htmlCtx : undefined)
-        : systemOverride
-        ? await generateFileWithOpenAI(file.name, file.description, prompt, isHtml ? htmlCtx : undefined, systemOverride)
-        : await generateFileWithOpenAI(file.name, file.description, prompt, isHtml ? htmlCtx : undefined);
+        ? await generateFileWithGroq(file.name, file.description, prompt, ctx, systemOverride, img)
+        : await generateFileWithOpenAI(file.name, file.description, prompt, ctx, systemOverride, img);
 
       let content = stripCodeFences(rawContent);
 
@@ -640,7 +685,8 @@ router.post("/generate", generateRateLimit, async (req: any, res: Response) => {
     return;
   }
 
-  const { prompt, model = "openai", refineFromId } = parsed.data;
+  const { prompt, model = "openai", refineFromId, imageBase64, imageMimeType } = parsed.data;
+  const img: ImageData | undefined = imageBase64 && imageMimeType ? { base64: imageBase64, mimeType: imageMimeType } : undefined;
   const userId = req.session.userId;
   const plan = req.session.plan ?? "free";
 
@@ -723,7 +769,7 @@ router.post("/generate", generateRateLimit, async (req: any, res: Response) => {
   const taskId = randomUUID();
   tasks.set(taskId, { status: "pending", createdAt: Date.now() });
 
-  runGeneration(taskId, userId, prompt, model, prevGen);
+  runGeneration(taskId, userId, prompt, model, prevGen, img);
 
   res.json({ taskId, cached: false, isRefinement: !!prevGen });
 });

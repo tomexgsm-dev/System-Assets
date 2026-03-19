@@ -64,7 +64,7 @@ export default function Home() {
     setLimitError(false);
   };
 
-  const handleGenerate = (prompt: string, model: Model, refineFromId?: number) => {
+  const handleGenerate = (prompt: string, model: Model, refineFromId?: number, imageBase64?: string, imageMimeType?: string) => {
     autoLoadedRef.current = true;
     if (!refineFromId) {
       setCurrentId(undefined);
@@ -76,7 +76,7 @@ export default function Home() {
     resetProgress();
 
     generateWebsite(
-      { data: { prompt, model, refineFromId } },
+      { data: { prompt, model, refineFromId, imageBase64, imageMimeType } },
       {
         onSuccess: (data) => {
           setCurrentId(data.id);

@@ -28,6 +28,14 @@ export const GenerateWebsiteBody = zod.object({
     .number()
     .optional()
     .describe("ID of an existing generation to refine/iterate on"),
+  imageBase64: zod
+    .string()
+    .optional()
+    .describe("Base64-encoded reference image to guide generation"),
+  imageMimeType: zod
+    .string()
+    .optional()
+    .describe("MIME type of the reference image (e.g. image/jpeg)"),
 });
 
 export const GenerateWebsiteResponse = zod.object({

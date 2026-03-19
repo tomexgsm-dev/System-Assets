@@ -103,7 +103,7 @@ export function useBuilderGenerate() {
       data,
       signal,
     }: {
-      data: { prompt: string; model?: "openai" | "claude" | "groq"; refineFromId?: number };
+      data: { prompt: string; model?: "openai" | "claude" | "groq"; refineFromId?: number; imageBase64?: string; imageMimeType?: string };
       signal?: AbortSignal;
     }): Promise<GenerationResult> => {
       const abortController = new AbortController();

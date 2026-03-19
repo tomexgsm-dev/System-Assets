@@ -1,10 +1,10 @@
-import React, { useState } from "react";
-import { Sparkles, Loader2, Crown, Wand2, PlusCircle, Zap } from "lucide-react";
+import React, { useState, useRef } from "react";
+import { Sparkles, Loader2, Crown, Wand2, PlusCircle, Zap, Paperclip, X } from "lucide-react";
 
 type Model = "openai" | "claude" | "groq";
 
 interface PromptSectionProps {
-  onSubmit: (prompt: string, model: Model, refineFromId?: number) => void;
+  onSubmit: (prompt: string, model: Model, refineFromId?: number, imageBase64?: string, imageMimeType?: string) => void;
   isLoading: boolean;
   currentPrompt?: string;
   refineId?: number;
@@ -51,15 +51,78 @@ const TEMPLATES: { icon: string; label: string; prompt: string }[] = [
   },
 ];
 
+async function resizeImageToBase64(file: Blob, maxPx = 1024): Promise<{ base64: string; mimeType: string }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(img, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      const base64 = dataUrl.split(",")[1];
+      resolve({ base64, mimeType: "image/jpeg" });
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
 export function PromptSection({ onSubmit, isLoading, currentPrompt, refineId, limitError, onUpgrade }: PromptSectionProps) {
   const [prompt, setPrompt] = useState("");
   const [model, setModel] = useState<Model>("openai");
   const [refineMode, setRefineMode] = useState(true);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageBase64, setImageBase64] = useState<string | undefined>();
+  const [imageMimeType, setImageMimeType] = useState<string | undefined>();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageFile = async (blob: Blob) => {
+    if (!blob.type.startsWith("image/")) return;
+    try {
+      const { base64, mimeType } = await resizeImageToBase64(blob);
+      setImageBase64(base64);
+      setImageMimeType(mimeType);
+      setImagePreview(`data:${mimeType};base64,${base64}`);
+    } catch {
+      console.error("Failed to process image");
+    }
+  };
+
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    const items = Array.from(e.clipboardData.items);
+    const imageItem = items.find((item) => item.type.startsWith("image/"));
+    if (imageItem) {
+      const blob = imageItem.getAsFile();
+      if (blob) {
+        e.preventDefault();
+        await handleImageFile(blob);
+      }
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) await handleImageFile(file);
+    e.target.value = "";
+  };
+
+  const clearImage = () => {
+    setImageBase64(undefined);
+    setImageMimeType(undefined);
+    setImagePreview(null);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!prompt.trim() || isLoading) return;
-    onSubmit(prompt, model, refineMode && refineId ? refineId : undefined);
+    onSubmit(prompt, model, refineMode && refineId ? refineId : undefined, imageBase64, imageMimeType);
   };
 
   const handleTemplate = (tpl: typeof TEMPLATES[0]) => {
@@ -175,6 +238,7 @@ export function PromptSection({ onSubmit, isLoading, currentPrompt, refineId, li
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
+            onPaste={handlePaste}
             disabled={isLoading || limitError}
             placeholder={
               isRefining
@@ -190,29 +254,79 @@ export function PromptSection({ onSubmit, isLoading, currentPrompt, refineId, li
             }}
           />
 
-          <div className="flex items-center justify-between px-4 py-3 bg-background/50 border-t border-border/50 backdrop-blur-md gap-3">
-            <div className="flex items-center gap-1.5 bg-muted/40 rounded-xl p-1 border border-border/40">
-              {MODEL_OPTIONS.map((opt) => (
+          {/* Image attachment preview */}
+          {imagePreview && (
+            <div className="px-5 pb-3 flex items-start gap-3">
+              <div className="relative group/img inline-flex">
+                <img
+                  src={imagePreview}
+                  alt="Reference"
+                  className="h-20 w-auto max-w-[160px] rounded-xl border border-border/60 object-cover shadow-md"
+                />
                 <button
-                  key={opt.value}
                   type="button"
-                  onClick={() => setModel(opt.value)}
-                  disabled={isLoading}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 disabled:opacity-50 ${
-                    model === opt.value
-                      ? "bg-card text-foreground shadow-sm border border-border/50"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
+                  onClick={clearImage}
+                  className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover/img:opacity-100 transition-opacity shadow-md"
+                  title="Remove image"
                 >
-                  <span className={`inline-block w-2 h-2 rounded-full bg-gradient-to-br ${opt.color}`} />
-                  {opt.label}
-                  {model === opt.value && (
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded-md bg-gradient-to-r ${opt.color} text-white font-bold`}>
-                      {opt.badge}
-                    </span>
-                  )}
+                  <X className="w-3 h-3" />
                 </button>
-              ))}
+              </div>
+              <div className="flex flex-col justify-center gap-0.5 pt-1">
+                <span className="text-xs font-semibold text-foreground">Reference image attached</span>
+                <span className="text-[11px] text-muted-foreground">AI will match its style &amp; layout</span>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between px-4 py-3 bg-background/50 border-t border-border/50 backdrop-blur-md gap-3">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 bg-muted/40 rounded-xl p-1 border border-border/40">
+                {MODEL_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setModel(opt.value)}
+                    disabled={isLoading}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 disabled:opacity-50 ${
+                      model === opt.value
+                        ? "bg-card text-foreground shadow-sm border border-border/50"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <span className={`inline-block w-2 h-2 rounded-full bg-gradient-to-br ${opt.color}`} />
+                    {opt.label}
+                    {model === opt.value && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-md bg-gradient-to-r ${opt.color} text-white font-bold`}>
+                        {opt.badge}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {/* Attach image button */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isLoading}
+                title={imagePreview ? "Replace image" : "Attach reference image (or paste one)"}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all duration-200 disabled:opacity-50 ${
+                  imagePreview
+                    ? "border-primary/50 bg-primary/10 text-primary"
+                    : "border-border/40 bg-muted/40 text-muted-foreground hover:text-foreground hover:border-border"
+                }`}
+              >
+                <Paperclip className="w-3.5 h-3.5" />
+                {imagePreview ? "Image" : "Image"}
+              </button>
             </div>
 
             <div className="flex items-center gap-3">

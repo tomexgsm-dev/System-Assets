@@ -1,0 +1,248 @@
+server.js (CAŁY BACKEND)
+import express from "express";
+import fetch from "node-fetch";
+import cors from "cors";
+import dotenv from "dotenv";
+import { createClient } from "@supabase/supabase-js";
+import JSZip from "jszip";
+import { minify } from "html-minifier-terser";
+
+dotenv.config();
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+
+// --------- LIMITY ----------
+async function checkLimits(userId) {
+  const { data } = await supabase.from("users").select("*").eq("id", userId).single();
+
+  const now = new Date();
+  const today = now.toISOString().split("T")[0];
+
+  if (!data.last_publish_date || data.last_publish_date.split("T")[0] !== today) {
+    await supabase.from("users").update({ daily_count: 0 }).eq("id", userId);
+    data.daily_count = 0;
+  }
+
+  if (data.plan === "free") {
+    if (data.daily_count >= 3) return false;
+    if (data.monthly_count >= 20) return false;
+  }
+
+  return true;
+}
+
+async function incrementCounts(userId) {
+  await supabase.from("users").update({
+    daily_count: supabase.raw("daily_count + 1"),
+    monthly_count: supabase.raw("monthly_count + 1"),
+    published_count: supabase.raw("published_count + 1"),
+    last_publish_date: new Date().toISOString()
+  }).eq("id", userId);
+}
+
+// --------- AI POPRAWKI ----------
+async function autoFix(html) {
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: "llama3-70b-8192",
+      messages: [
+        { role: "system", content: "Popraw HTML/CSS/JS i zoptymalizuj kod. Zwróć tylko kod." },
+        { role: "user", content: html }
+      ]
+    })
+  });
+
+  const data = await res.json();
+  return data.choices[0].message.content;
+}
+
+// --------- GENEROWANIE ----------
+app.post("/generate", async (req, res) => {
+  const { userId, prompt } = req.body;
+
+  const { data } = await supabase
+    .from("users")
+    .select("style_preferences, history")
+    .eq("id", userId)
+    .single();
+
+  const style = data?.style_preferences || {};
+  const history = data?.history || [];
+
+  const fullPrompt = `
+  Stwórz nowoczesną stronę.
+  Styl: ${JSON.stringify(style)}
+  Historia: ${history.map(h => h.prompt).join(",")}
+  Prompt: ${prompt}
+  Strona ma być responsywna, animacje, SEO.
+  `;
+
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: "llama3-70b-8192",
+      messages: [{ role: "user", content: fullPrompt }]
+    })
+  });
+
+  const ai = await response.json();
+  let html = ai.choices[0].message.content;
+
+  // poprawki + minifikacja
+  html = await autoFix(html);
+  html = await minify(html, { collapseWhitespace: true });
+
+  await supabase.from("users").update({
+    history: [...history, { prompt }]
+  }).eq("id", userId);
+
+  res.json({ html });
+});
+
+// --------- DEPLOY ----------
+async function createZip(html) {
+  const zip = new JSZip();
+  zip.file("index.html", html);
+  return await zip.generateAsync({ type: "nodebuffer" });
+}
+
+app.post("/deploy", async (req, res) => {
+  const { html, userId } = req.body;
+
+  const allowed = await checkLimits(userId);
+  if (!allowed) return res.json({ error: "Limit osiągnięty 🔒" });
+
+  const zip = await createZip(html);
+
+  const siteRes = await fetch("https://api.netlify.com/api/v1/sites", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.NETLIFY_TOKEN}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ name: "ai-site-" + Date.now() })
+  });
+
+  const site = await siteRes.json();
+
+  await fetch(`https://api.netlify.com/api/v1/sites/${site.id}/deploys`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.NETLIFY_TOKEN}`,
+      "Content-Type": "application/zip"
+    },
+    body: zip
+  });
+
+  await incrementCounts(userId);
+
+  res.json({ url: site.ssl_url });
+});
+
+// --------- STYL ----------
+app.post("/style", async (req, res) => {
+  const { userId, style } = req.body;
+
+  await supabase.from("users")
+    .update({ style_preferences: style })
+    .eq("id", userId);
+
+  res.json({ ok: true });
+});
+
+app.listen(3000, () => console.log("🚀 Server działa"));
+🌐 index.html (FRONTEND)
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>AI Builder</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+</head>
+
+<body style="background:#111;color:white;font-family:sans-serif">
+
+<h2>AI Website Builder 🔥</h2>
+
+<textarea id="prompt" placeholder="Opisz stronę"></textarea><br>
+<button onclick="generate()">Generuj</button>
+<button onclick="publish()">🚀 Publikuj</button>
+<button onclick="saveStyle()">🎨 Styl</button>
+
+<iframe id="preview" style="width:100%;height:500px"></iframe>
+
+<script>
+const supabase = window.supabase.createClient("SUPABASE_URL","SUPABASE_KEY");
+let userId = "";
+let aiHTML = "";
+
+// login
+async function login() {
+  const email = prompt("Email");
+  await supabase.auth.signInWithOtp({ email });
+  const session = await supabase.auth.getSession();
+  userId = session.data.session.user.id;
+}
+
+// generowanie
+async function generate() {
+  const prompt = document.getElementById("prompt").value;
+
+  const res = await fetch("http://localhost:3000/generate", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ userId, prompt })
+  });
+
+  const data = await res.json();
+  aiHTML = data.html;
+  document.getElementById("preview").srcdoc = aiHTML;
+}
+
+// publikacja
+async function publish() {
+  const res = await fetch("http://localhost:3000/deploy", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ userId, html: aiHTML })
+  });
+
+  const data = await res.json();
+  alert(data.url || data.error);
+}
+
+// styl
+async function saveStyle() {
+  const style = {
+    colors: prompt("Kolory np #ff0000,#000"),
+    font: prompt("Font"),
+    layout: prompt("Styl UX")
+  };
+
+  await fetch("http://localhost:3000/style", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ userId, style })
+  });
+
+  alert("Styl zapisany");
+}
+</script>
+
+<button onclick="login()">Zaloguj</button>
+
+</body>
+</html>

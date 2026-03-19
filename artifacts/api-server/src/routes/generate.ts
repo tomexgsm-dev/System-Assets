@@ -7,6 +7,12 @@ import { db, generationsTable, usersTable } from "@workspace/db";
 import { desc, eq, count, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import archiver from "archiver";
+import {
+  checkGenerationLimit,
+  incrementGenerationCount,
+  FREE_DAILY_GEN,
+  FREE_MONTHLY_GEN,
+} from "../utils/limits";
 import { minify as minifyHTML } from "html-minifier-terser";
 import CleanCSS from "clean-css";
 import { minify as minifyJS } from "terser";
@@ -876,6 +882,13 @@ async function runGeneration(
       createdAt: Date.now(),
     });
 
+    // Increment daily/monthly generation counters (fire-and-forget)
+    if (!refineFromId) {
+      incrementGenerationCount(userId).catch((e: any) =>
+        console.warn("[limits] Failed to increment generation count:", e?.message)
+      );
+    }
+
     // Append prompt to user's history (fire-and-forget, don't block)
     db.select({ promptHistory: usersTable.promptHistory })
       .from(usersTable)
@@ -969,17 +982,17 @@ router.post("/generate", generateRateLimit, async (req: any, res: Response) => {
     }
   }
 
-  // ── Free plan limit check ──────────────────────────────────────────────────
-  if (plan === "free") {
-    const [{ value }] = await db
-      .select({ value: count() })
-      .from(generationsTable)
-      .where(eq(generationsTable.userId, userId));
-
-    if (value >= FREE_PLAN_LIMIT) {
+  // ── Free plan limit check (daily + monthly, resets automatically) ──────────
+  if (plan === "free" && !refineFromId) {
+    const limitResult = await checkGenerationLimit(userId);
+    if (!limitResult.allowed) {
       res.status(403).json({
         error: "limit_reached",
-        message: `Free plan allows ${FREE_PLAN_LIMIT} generations. Upgrade to PRO for unlimited.`,
+        message: limitResult.reason,
+        daily: limitResult.daily,
+        dailyLimit: limitResult.dailyLimit,
+        monthly: limitResult.monthly,
+        monthlyLimit: limitResult.monthlyLimit,
       });
       return;
     }

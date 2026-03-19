@@ -27,7 +27,13 @@ export function Sidebar({ onSelectGeneration, activeId }: SidebarProps) {
 
   const isPro = user?.plan === "pro";
   const genCount = generations?.length ?? 0;
-  const atLimit = !isPro && genCount >= FREE_LIMIT;
+  const dailyGenCount   = user?.dailyGenCount   ?? 0;
+  const monthlyGenCount = user?.monthlyGenCount  ?? 0;
+  const FREE_DAILY_GEN   = 3;
+  const FREE_MONTHLY_GEN = 30;
+  const atDailyLimit   = !isPro && dailyGenCount   >= FREE_DAILY_GEN;
+  const atMonthlyLimit = !isPro && monthlyGenCount >= FREE_MONTHLY_GEN;
+  const atLimit = atDailyLimit || atMonthlyLimit;
 
   return (
     <div className="w-80 flex-shrink-0 h-full flex flex-col bg-card/80 backdrop-blur-xl border-r border-border/50 relative z-20">
@@ -49,7 +55,11 @@ export function Sidebar({ onSelectGeneration, activeId }: SidebarProps) {
                 {isPro && <Crown className="w-3 h-3 text-amber-500 shrink-0" />}
               </div>
               <p className="text-[11px] text-muted-foreground">
-                {isPro ? "PRO — Unlimited" : `${genCount} / ${FREE_LIMIT} websites used`}
+                {isPro
+                  ? "PRO — Unlimited"
+                  : atDailyLimit
+                  ? `Daily limit reached (resets midnight UTC)`
+                  : `${dailyGenCount}/${FREE_DAILY_GEN} today · ${monthlyGenCount}/${FREE_MONTHLY_GEN} this month`}
               </p>
             </div>
             <div className="flex items-center gap-1">
@@ -79,11 +89,15 @@ export function Sidebar({ onSelectGeneration, activeId }: SidebarProps) {
 
           {/* Plan limit bar */}
           {!isPro && (
-            <div className="mt-2">
+            <div className="mt-2 space-y-1">
+              <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                <span>Today</span>
+                <span className={atDailyLimit ? "text-orange-500 font-semibold" : ""}>{dailyGenCount}/{FREE_DAILY_GEN}</span>
+              </div>
               <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                 <div
-                  className={`h-full rounded-full transition-all ${atLimit ? "bg-orange-500" : "bg-primary"}`}
-                  style={{ width: `${Math.min((genCount / FREE_LIMIT) * 100, 100)}%` }}
+                  className={`h-full rounded-full transition-all ${atDailyLimit ? "bg-orange-500" : "bg-primary"}`}
+                  style={{ width: `${Math.min((dailyGenCount / FREE_DAILY_GEN) * 100, 100)}%` }}
                 />
               </div>
               {atLimit && (

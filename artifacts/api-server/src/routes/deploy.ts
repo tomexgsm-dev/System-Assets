@@ -3,10 +3,9 @@ import archiver from "archiver";
 import { db, generationsTable, usersTable } from "@workspace/db";
 import { eq, and, sql } from "drizzle-orm";
 import type { ProjectFile } from "@workspace/db";
+import { checkPublishLimit, incrementPublishCount } from "../utils/limits";
 
 const router: IRouter = Router();
-
-const FREE_PUBLISH_LIMIT = 3;
 
 // POST /api/deploy — publish a project to Netlify
 router.post("/deploy", async (req: any, res: Response) => {
@@ -33,20 +32,17 @@ router.post("/deploy", async (req: any, res: Response) => {
   const userId = req.session.userId;
   const plan = req.session.plan ?? "free";
 
-  // ── Free plan publish limit ────────────────────────────────────────────────
+  // ── Free plan publish limit (daily + monthly with auto-reset) ──────────────
   if (plan === "free") {
-    const [user] = await db
-      .select({ publishCount: usersTable.publishCount })
-      .from(usersTable)
-      .where(eq(usersTable.id, userId))
-      .limit(1);
-
-    if (user && user.publishCount >= FREE_PUBLISH_LIMIT) {
+    const limitResult = await checkPublishLimit(userId);
+    if (!limitResult.allowed) {
       res.status(403).json({
         error: "publish_limit",
-        message: `Free plan allows ${FREE_PUBLISH_LIMIT} published sites. Upgrade to PRO for unlimited publishing.`,
-        publishCount: user.publishCount,
-        limit: FREE_PUBLISH_LIMIT,
+        message: limitResult.reason,
+        daily: limitResult.daily,
+        dailyLimit: limitResult.dailyLimit,
+        monthly: limitResult.monthly,
+        monthlyLimit: limitResult.monthlyLimit,
       });
       return;
     }
@@ -114,13 +110,10 @@ router.post("/deploy", async (req: any, res: Response) => {
     const deploy = (await deployRes.json()) as { deploy_ssl_url?: string; ssl_url?: string };
     const liveUrl = deploy.deploy_ssl_url ?? deploy.ssl_url ?? site.ssl_url ?? site.url;
 
-    // 4. Increment publish counter for free users
-    if (plan === "free") {
-      await db
-        .update(usersTable)
-        .set({ publishCount: sql`${usersTable.publishCount} + 1` })
-        .where(eq(usersTable.id, userId));
-    }
+    // 4. Increment publish counters (all users — tracks total publishes)
+    await incrementPublishCount(userId).catch((e: any) =>
+      console.warn("[limits] Failed to increment publish count:", e?.message)
+    );
 
     console.log(`[Netlify] deployed gen#${generationId} by user#${userId} → ${liveUrl}`);
     res.json({ url: liveUrl, siteId: site.id });
@@ -172,12 +165,19 @@ router.post("/deploy-wp", async (req: any, res: Response) => {
 
   const plan = userRow?.plan ?? "free";
 
-  if (plan === "free" && userRow && userRow.publishCount >= FREE_PUBLISH_LIMIT) {
-    res.status(403).json({
-      error: "publish_limit",
-      message: `Free plan allows ${FREE_PUBLISH_LIMIT} published sites. Upgrade to PRO for unlimited publishing.`,
-    });
-    return;
+  if (plan === "free") {
+    const limitResult = await checkPublishLimit(userId);
+    if (!limitResult.allowed) {
+      res.status(403).json({
+        error: "publish_limit",
+        message: limitResult.reason,
+        daily: limitResult.daily,
+        dailyLimit: limitResult.dailyLimit,
+        monthly: limitResult.monthly,
+        monthlyLimit: limitResult.monthlyLimit,
+      });
+      return;
+    }
   }
 
   // Load generation
@@ -223,13 +223,10 @@ router.post("/deploy-wp", async (req: any, res: Response) => {
     const data = (await wpRes.json()) as { link?: string };
     const liveUrl = data.link ?? base;
 
-    // Increment publish counter for free users
-    if (plan === "free") {
-      await db
-        .update(usersTable)
-        .set({ publishCount: sql`${usersTable.publishCount} + 1` })
-        .where(eq(usersTable.id, userId));
-    }
+    // Increment publish counters
+    await incrementPublishCount(userId).catch((e: any) =>
+      console.warn("[limits] Failed to increment WP publish count:", e?.message)
+    );
 
     console.log(`[WordPress] deployed gen#${generationId} by user#${userId} → ${liveUrl}`);
     res.json({ url: liveUrl });

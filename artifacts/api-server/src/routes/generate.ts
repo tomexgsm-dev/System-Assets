@@ -19,6 +19,53 @@ import type { ProjectFile } from "@workspace/db";
 
 const router: IRouter = Router();
 
+// ─── Robust JSON parser for AI responses ──────────────────────────────────────
+// LLMs frequently produce: trailing commas, comments, markdown fences, or text
+// surrounding the JSON object. This function handles all common cases.
+function repairAndParseJSON(raw: string): any {
+  // 1. Strip markdown code fences (```json ... ``` or ``` ... ```)
+  let text = raw
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```\s*$/i, "")
+    .trim();
+
+  // 2. Try to extract just the first top-level JSON object or array
+  //    (strips any explanatory prose the model added before or after)
+  const objMatch = text.match(/\{[\s\S]*\}/);
+  const arrMatch = text.match(/\[[\s\S]*\]/);
+  if (objMatch || arrMatch) {
+    // Use whichever appears first in the string
+    const objIdx = objMatch ? text.indexOf(objMatch[0]) : Infinity;
+    const arrIdx = arrMatch ? text.indexOf(arrMatch[0]) : Infinity;
+    text = objIdx <= arrIdx ? objMatch![0] : arrMatch![0];
+  }
+
+  // 3. Try straight parse first (fast path for valid JSON)
+  try {
+    return JSON.parse(text);
+  } catch {}
+
+  // 4. Repair common LLM JSON issues:
+  const repaired = text
+    // Remove single-line comments
+    .replace(/\/\/[^\n]*/g, "")
+    // Remove block comments
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    // Remove trailing commas before } or ]
+    .replace(/,\s*([\]}])/g, "$1")
+    // Replace single-quoted strings with double-quoted (simple, non-nested cases)
+    .replace(/'([^'\\]*(\\.[^'\\]*)*)'/g, (_, inner) => `"${inner}"`)
+    .trim();
+
+  // 5. Final parse — let the error propagate with context if still broken
+  try {
+    return JSON.parse(repaired);
+  } catch (err: any) {
+    throw new Error(`Failed to parse AI JSON response: ${err.message}\nRaw (first 300 chars): ${raw.slice(0, 300)}`);
+  }
+}
+
 const FREE_PLAN_LIMIT = 3;
 
 // ─── Rate limiting: 10 generations per minute per user ───────────────────────
@@ -293,7 +340,7 @@ async function planWithOpenAI(prompt: string, systemOverride?: string, img?: Ima
     ],
   } as any);
   const raw = completion.choices[0]?.message?.content ?? "{}";
-  const parsed = JSON.parse(raw.replace(/^```json?\s*/i, "").replace(/\s*```$/i, "").trim());
+  const parsed = repairAndParseJSON(raw);
   return parsed.files ?? [];
 }
 
@@ -309,7 +356,7 @@ async function planWithClaude(prompt: string, systemOverride?: string, img?: Ima
   });
   const block = message.content[0];
   const raw = block.type === "text" ? block.text : "{}";
-  const parsed = JSON.parse(raw.replace(/^```json?\s*/i, "").replace(/\s*```$/i, "").trim());
+  const parsed = repairAndParseJSON(raw);
   return parsed.files ?? [];
 }
 
@@ -419,7 +466,7 @@ async function planWithGroq(prompt: string, systemOverride?: string, img?: Image
     ],
   });
   const raw = completion.choices[0]?.message?.content ?? "{}";
-  const parsed = JSON.parse(raw.replace(/^```json?\s*/i, "").replace(/\s*```$/i, "").trim());
+  const parsed = repairAndParseJSON(raw);
   return parsed.files ?? [];
 }
 

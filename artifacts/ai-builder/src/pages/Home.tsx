@@ -120,6 +120,14 @@ export default function Home() {
           refineId={currentId}
           limitError={limitError}
           onUpgrade={() => navigate("/dashboard")}
+          onAutoBusinessResult={(id, html, prompt) => {
+            autoLoadedRef.current = true;
+            setCurrentId(id);
+            setCurrentHtml(html);
+            setCurrentPrompt(prompt);
+            setCurrentFiles([{ name: "index.html", content: html, description: "Generated landing page" }]);
+            setLimitError(false);
+          }}
         />
 
         <BrowserPreview

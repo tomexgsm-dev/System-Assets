@@ -1,0 +1,113 @@
+dashboard.html (GOTOWY)
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<title>Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+
+<style>
+body {background:#0f0f0f; color:white; font-family:Arial;}
+.container {max-width:800px; margin:auto; padding:20px;}
+.box {background:#1a1a1a; padding:20px; margin:10px 0; border-radius:10px;}
+button {padding:10px; background:#4CAF50; border:none; color:white; cursor:pointer;}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>Dashboard 🚀</h1>
+
+<div class="box">
+<h3>Plan:</h3>
+<p id="plan"></p>
+</div>
+
+<div class="box">
+<h3>Kredyty:</h3>
+<p id="credits"></p>
+</div>
+
+<div class="box">
+<h3>Wygasa:</h3>
+<p id="expiry"></p>
+</div>
+
+<div class="box">
+<h3>Statystyki:</h3>
+<p id="stats"></p>
+</div>
+
+<button onclick="buyPro()">💎 Kup PRO</button>
+<button onclick="logout()">Wyloguj</button>
+
+</div>
+
+<script>
+
+const supabase = window.supabase.createClient(
+  "SUPABASE_URL",
+  "SUPABASE_KEY"
+);
+
+let userId = "";
+
+// 🔐 pobranie usera
+async function loadUser() {
+  const session = await supabase.auth.getSession();
+  userId = session.data.session.user.id;
+
+  loadData();
+}
+
+// 📊 pobranie danych
+async function loadData() {
+  const { data } = await supabase
+    .from("users")
+    .select("*")
+    .eq("id", userId)
+    .single();
+
+  document.getElementById("plan").innerText = data.plan;
+
+  document.getElementById("credits").innerText =
+    data.plan === "pro" ? "Nielimitowane 🔥" : data.credits;
+
+  document.getElementById("expiry").innerText =
+    data.plan_expiry || "Brak";
+
+  document.getElementById("stats").innerText =
+    "Publikacje: " + data.published_count +
+    " | Dziennie: " + data.daily_count +
+    " | Miesięcznie: " + data.monthly_count;
+}
+
+// 💸 PRO
+function buyPro() {
+  window.location.href = "LINK_STRIPE";
+}
+
+// 🚪 logout
+async function logout() {
+  await supabase.auth.signOut();
+  window.location.href = "/";
+}
+
+loadUser();
+
+</script>
+
+</body>
+</html>
+🔥 BACKEND (DODAJ API)
+
+👉 upewnij się, że masz dane w Supabase:
+
+credits
+plan
+plan_expiry
+published_count
+daily_count
+monthly_count

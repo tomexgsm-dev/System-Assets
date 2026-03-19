@@ -39,7 +39,7 @@ export function useAuth() {
     onSuccess: () => {
       queryClient.setQueryData(["auth-me"], null);
       queryClient.invalidateQueries({ queryKey: ["auth-me"] });
-      navigate("/login");
+      navigate("/");
     },
   });
 

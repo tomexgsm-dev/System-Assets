@@ -34,7 +34,7 @@ export default function Register() {
       }
 
       queryClient.setQueryData(["auth-me"], data);
-      navigate("/");
+      navigate("/app");
     } catch {
       setError("An unexpected error occurred");
     } finally {

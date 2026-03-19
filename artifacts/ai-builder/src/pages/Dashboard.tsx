@@ -108,7 +108,7 @@ export default function Dashboard() {
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={() => navigate("/")}
+              onClick={() => navigate("/app")}
               className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -174,7 +174,7 @@ export default function Dashboard() {
           <h2 className="font-display font-semibold text-foreground">My Projects ({genCount})</h2>
           {!atLimit && (
             <button
-              onClick={() => navigate("/")}
+              onClick={() => navigate("/app")}
               className="flex items-center gap-2 text-sm bg-primary/10 hover:bg-primary/20 text-primary font-medium px-3 py-1.5 rounded-lg transition-colors border border-primary/20"
             >
               <Plus className="w-4 h-4" />
@@ -193,7 +193,7 @@ export default function Dashboard() {
             <p className="font-medium text-foreground mb-1">No projects yet</p>
             <p className="text-sm text-muted-foreground mb-4">Go back to the builder and create your first website.</p>
             <button
-              onClick={() => navigate("/")}
+              onClick={() => navigate("/app")}
               className="bg-gradient-to-r from-primary to-accent text-white text-sm font-semibold px-4 py-2 rounded-xl hover:opacity-90 transition-opacity shadow-glow"
             >
               Start building

@@ -4,6 +4,7 @@ import generateRouter from "./generate";
 import authRouter from "./auth";
 import stripeRouter from "./stripe";
 import deployRouter from "./deploy";
+import styleRouter from "./style";
 
 const router: IRouter = Router();
 
@@ -12,5 +13,6 @@ router.use(authRouter);
 router.use(generateRouter);
 router.use(stripeRouter);
 router.use(deployRouter);
+router.use(styleRouter);
 
 export default router;

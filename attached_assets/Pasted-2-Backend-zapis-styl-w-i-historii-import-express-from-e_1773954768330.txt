@@ -1,0 +1,112 @@
+2️⃣ Backend — zapis stylów i historii
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import { createClient } from "@supabase/supabase-js";
+
+dotenv.config();
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+
+// zapis stylów użytkownika
+app.post("/save-style", async (req, res) => {
+  const { userId, stylePreferences } = req.body;
+  const { data, error } = await supabase
+    .from("users")
+    .update({ style_preferences: stylePreferences })
+    .eq("id", userId);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true });
+});
+
+// zapis historii promptów
+app.post("/save-history", async (req, res) => {
+  const { userId, prompt } = req.body;
+  // pobierz aktualną historię
+  const { data } = await supabase
+    .from("users")
+    .select("history")
+    .eq("id", userId)
+    .single();
+
+  const history = data.history || [];
+  history.push({ prompt, date: new Date() });
+
+  await supabase
+    .from("users")
+    .update({ history })
+    .eq("id", userId);
+
+  res.json({ success: true });
+});
+3️⃣ Backend — generowanie strony z personalizacją
+app.post("/generate", async (req, res) => {
+  const { userId, prompt } = req.body;
+
+  // pobieramy style i historię
+  const { data } = await supabase
+    .from("users")
+    .select("style_preferences, history")
+    .eq("id", userId)
+    .single();
+
+  const style = data.style_preferences || {};
+  const history = data.history || [];
+
+  const personalizedPrompt = `
+    Generuj stronę na podstawie promptu: "${prompt}".
+    Styl użytkownika: kolory: ${style.colors || "default"}, font: ${style.font || "default"}, layout: ${style.layout || "default"}.
+    Historia użytkownika: ${history.map(h => h.prompt).join("; ")}
+    Strona ma być responsywna i gotowa do publikacji.
+  `;
+
+  // wywołanie AI (GROQ / inny model)
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: "llama3-70b-8192",
+      messages: [
+        { role: "system", content: "Jesteś ekspertem frontend developerem." },
+        { role: "user", content: personalizedPrompt }
+      ]
+    })
+  });
+
+  const aiData = await response.json();
+  const html = aiData.choices[0].message.content;
+
+  // zapis historii
+  await supabase.from("users").update({
+    history: [...history, { prompt, date: new Date() }]
+  }).eq("id", userId);
+
+  res.json({ html });
+});
+4️⃣ Frontend — ustawienia stylu
+async function saveStyle() {
+  const colors = prompt("Podaj kolory (oddzielone przecinkami)");
+  const font = prompt("Podaj font");
+  const layout = prompt("Podaj layout (minimal, modern, classic)");
+
+  const stylePreferences = {
+    colors: colors.split(","),
+    font,
+    layout
+  };
+
+  await fetch("http://localhost:3000/save-style", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, stylePreferences })
+  });
+
+  alert("Styl zapisany ✅");
+}

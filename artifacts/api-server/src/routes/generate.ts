@@ -690,6 +690,20 @@ function inlineAssetsIntoHtml(html: string, files: ProjectFile[]): string {
   return result;
 }
 
+// ─── Build style-personalised prompt suffix ───────────────────────────────────
+function buildStyleSuffix(style: Record<string, any> | null | undefined): string {
+  if (!style || Object.keys(style).length === 0) return "";
+  const parts: string[] = [];
+  if (Array.isArray(style.colors) && style.colors.length > 0) {
+    parts.push(`Color palette: ${style.colors.join(", ")}`);
+  }
+  if (style.font) parts.push(`Typography: ${style.font}`);
+  if (style.layout) parts.push(`Layout style: ${style.layout}`);
+  if (style.mood) parts.push(`Mood/tone: ${style.mood}`);
+  if (parts.length === 0) return "";
+  return `\n\nUSER STYLE PREFERENCES (respect these when choosing colors, fonts, and layout):\n${parts.map((p) => `- ${p}`).join("\n")}`;
+}
+
 // ─── Main generation pipeline ─────────────────────────────────────────────────
 async function runGeneration(
   taskId: string,
@@ -701,6 +715,23 @@ async function runGeneration(
   refineFromId?: number
 ) {
   try {
+    // Step 0: Load user style preferences for personalization
+    let stylePromptSuffix = "";
+    try {
+      const [userRow] = await db
+        .select({ stylePreferences: usersTable.stylePreferences })
+        .from(usersTable)
+        .where(eq(usersTable.id, userId));
+      stylePromptSuffix = buildStyleSuffix(userRow?.stylePreferences as any);
+      if (stylePromptSuffix) {
+        console.log(`[style] Personalizing generation for user ${userId}`);
+      }
+    } catch (e: any) {
+      console.warn("[style] Could not load style preferences:", e?.message);
+    }
+
+    const personalizedPrompt = prompt + stylePromptSuffix;
+
     // Step 1: Plan — use refinement planner when previous context exists
     tasks.set(taskId, { ...tasks.get(taskId)!, status: "planning" });
 
@@ -709,8 +740,8 @@ async function runGeneration(
     // For reasoning models (GPT-5.2), system messages are deprioritised — embed
     // the previous-site context in the user message as well so it is always seen.
     const plannerPrompt = prevGen
-      ? `EXISTING SITE TO REFINE:\n- Original description: "${prevGen.prompt}"\n- Existing files: ${prevGen.files.map((f) => `${f.name}${f.description ? ` (${f.description})` : ""}`).join(", ")}\n\nRefinement instruction: ${prompt}`
-      : prompt;
+      ? `EXISTING SITE TO REFINE:\n- Original description: "${prevGen.prompt}"\n- Existing files: ${prevGen.files.map((f) => `${f.name}${f.description ? ` (${f.description})` : ""}`).join(", ")}\n\nRefinement instruction: ${personalizedPrompt}`
+      : personalizedPrompt;
 
     const plan = model === "claude"
       ? await planWithClaude(plannerPrompt, plannerSystemOverride, img)
@@ -768,10 +799,10 @@ async function runGeneration(
       let rawContent = "";
       try {
         rawContent = model === "claude"
-          ? await generateFileWithClaude(file.name, file.description, prompt, ctx, systemOverride, img, prevFileContent)
+          ? await generateFileWithClaude(file.name, file.description, personalizedPrompt, ctx, systemOverride, img, prevFileContent)
           : model === "groq"
-          ? await generateFileWithGroq(file.name, file.description, prompt, ctx, systemOverride, img, prevFileContent)
-          : await generateFileWithOpenAI(file.name, file.description, prompt, ctx, systemOverride, img, prevFileContent);
+          ? await generateFileWithGroq(file.name, file.description, personalizedPrompt, ctx, systemOverride, img, prevFileContent)
+          : await generateFileWithOpenAI(file.name, file.description, personalizedPrompt, ctx, systemOverride, img, prevFileContent);
       } catch (fileErr: any) {
         console.error(`[generator] File ${file.name} generation failed (${fileErr?.message ?? fileErr}), using fallback`);
         rawContent = "";
@@ -844,6 +875,18 @@ async function runGeneration(
       filesDone: plan.length,
       createdAt: Date.now(),
     });
+
+    // Append prompt to user's history (fire-and-forget, don't block)
+    db.select({ promptHistory: usersTable.promptHistory })
+      .from(usersTable)
+      .where(eq(usersTable.id, userId))
+      .then(([row]) => {
+        const history: Array<{ prompt: string; date: string }> = Array.isArray(row?.promptHistory) ? row.promptHistory : [];
+        const updated = [{ prompt: prompt.slice(0, 300), date: new Date().toISOString() }, ...history].slice(0, 50);
+        return db.update(usersTable).set({ promptHistory: updated } as any).where(eq(usersTable.id, userId));
+      })
+      .catch((e: any) => console.warn("[style] Failed to save prompt history:", e?.message));
+
   } catch (err: any) {
     const detail = err?.message ?? String(err);
     const stack = err?.stack ?? "";

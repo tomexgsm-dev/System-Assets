@@ -1,10 +1,11 @@
 import React from "react";
 import { format } from "date-fns";
-import { History, Search, Loader2, Sparkles, ExternalLink, Crown, LayoutDashboard, LogOut } from "lucide-react";
+import { History, Search, Loader2, Sparkles, ExternalLink, Crown, LayoutDashboard, LogOut, Palette } from "lucide-react";
 import { useLocation } from "wouter";
 import { useBuilderGenerations } from "@/hooks/use-builder";
 import { useAuth } from "@/hooks/use-auth";
 import type { Generation } from "@workspace/api-client-react/src/generated/api.schemas";
+import { StyleSettings } from "@/components/StyleSettings";
 
 const FREE_LIMIT = 3;
 
@@ -18,6 +19,7 @@ export function Sidebar({ onSelectGeneration, activeId }: SidebarProps) {
   const { user, logout } = useAuth();
   const [search, setSearch] = React.useState("");
   const [, navigate] = useLocation();
+  const [showStyle, setShowStyle] = React.useState(false);
 
   const filtered = generations?.filter((g) =>
     g.prompt.toLowerCase().includes(search.toLowerCase())
@@ -51,6 +53,13 @@ export function Sidebar({ onSelectGeneration, activeId }: SidebarProps) {
               </p>
             </div>
             <div className="flex items-center gap-1">
+              <button
+                onClick={() => setShowStyle(true)}
+                title="Style preferences"
+                className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Palette className="w-4 h-4" />
+              </button>
               <button
                 onClick={() => navigate("/dashboard")}
                 title="Dashboard"
@@ -171,6 +180,8 @@ export function Sidebar({ onSelectGeneration, activeId }: SidebarProps) {
           ))
         )}
       </div>
+
+      <StyleSettings open={showStyle} onClose={() => setShowStyle(false)} />
     </div>
   );
 }

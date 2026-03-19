@@ -1,4 +1,11 @@
-import { pgTable, text, serial, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, jsonb } from "drizzle-orm/pg-core";
+
+export interface StylePreferences {
+  colors: string[];
+  font: string;
+  layout: "minimal" | "modern" | "classic" | "bold" | "elegant";
+  mood: string;
+}
 
 export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -8,6 +15,8 @@ export const usersTable = pgTable("users", {
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
   publishCount: integer("publish_count").notNull().default(0),
+  stylePreferences: jsonb("style_preferences").$type<StylePreferences>().default({} as StylePreferences),
+  promptHistory: jsonb("prompt_history").$type<Array<{ prompt: string; date: string }>>().default([]),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

@@ -60,10 +60,11 @@ export function BrowserPreview({
 
   // ── AI Chat state ──
   const [showChat, setShowChat] = useState(false);
-  type ChatMsg = { role: "user" | "ai"; text: string };
+  type ChatMsg = { role: "user" | "ai" | "agent-step"; text: string; step?: number; total?: number };
   const [chatMessages, setChatMessages] = useState<ChatMsg[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
+  const [agentRunning, setAgentRunning] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const { toast } = useToast();
@@ -248,6 +249,61 @@ export function BrowserPreview({
 
   const handleFixCode = () => {
     sendChatMessage("Fix all bugs and improve the code quality.", "fix");
+  };
+
+  const handleRunAgent = async (iterations = 2) => {
+    if (!currentHtml || agentRunning || chatLoading) return;
+
+    setAgentRunning(true);
+    setShowChat(true);
+
+    const startMsg: ChatMsg = {
+      role: "ai",
+      text: `🤖 **AI Agent started** — running ${iterations} analyze→fix iterations on your code…`,
+    };
+    setChatMessages((prev) => [...prev, startMsg]);
+    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+
+    try {
+      const res = await fetch(`${BASE}/api/agent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ html: currentHtml, iterations }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Agent error");
+
+      // Append each step as a separate message
+      const stepMsgs: ChatMsg[] = data.steps.map((s: { step: number; issues: string }) => ({
+        role: "agent-step" as const,
+        text: s.issues,
+        step: s.step,
+        total: data.steps.length,
+      }));
+
+      const doneMsg: ChatMsg = {
+        role: "ai",
+        text: `✅ **Agent finished** — applied ${data.steps.length} round${data.steps.length > 1 ? "s" : ""} of fixes. Preview updated!`,
+      };
+
+      setChatMessages((prev) => [...prev, ...stepMsgs, doneMsg]);
+
+      if (data.finalHTML) {
+        setLiveHtml(data.finalHTML);
+        onHtmlChange?.(data.finalHTML);
+        toast({ title: "Agent done!", description: `${data.steps.length} iterations completed and applied.` });
+      }
+    } catch (err: any) {
+      setChatMessages((prev) => [
+        ...prev,
+        { role: "ai", text: `❌ Agent error: ${err.message ?? String(err)}` },
+      ]);
+    } finally {
+      setAgentRunning(false);
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    }
   };
 
   const phaseLabel   = PHASE_LABELS[progress.phase] ?? "Working...";
@@ -595,27 +651,47 @@ export function BrowserPreview({
             className="mt-3 rounded-2xl border border-violet-500/30 bg-card/80 backdrop-blur-sm overflow-hidden"
           >
             {/* Chat header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border/40 bg-violet-500/5">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border/40 bg-violet-500/5 flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <Bot className="w-4 h-4 text-violet-400" />
                 <span className="text-sm font-semibold text-foreground">AI Code Assistant</span>
-                <span className="text-xs text-muted-foreground">— ask about your page or let AI fix it</span>
+                <span className="text-xs text-muted-foreground hidden sm:inline">— ask or auto-fix your page</span>
               </div>
-              <button
-                onClick={handleFixCode}
-                disabled={chatLoading}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs font-semibold border border-amber-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {chatLoading ? (
-                  <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                ) : (
-                  <Wrench className="w-3.5 h-3.5" />
-                )}
-                Auto-fix code
-              </button>
+              <div className="flex items-center gap-2">
+                {/* Quick fix (1 pass) */}
+                <button
+                  onClick={handleFixCode}
+                  disabled={chatLoading || agentRunning}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs font-semibold border border-amber-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {chatLoading && !agentRunning ? (
+                    <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  ) : (
+                    <Wrench className="w-3.5 h-3.5" />
+                  )}
+                  Quick Fix
+                </button>
+
+                {/* AI Agent (multi-pass) */}
+                <button
+                  onClick={() => handleRunAgent(2)}
+                  disabled={agentRunning || chatLoading}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-fuchsia-500/10 hover:bg-fuchsia-500/20 text-fuchsia-400 text-xs font-semibold border border-fuchsia-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {agentRunning ? (
+                    <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5" />
+                  )}
+                  {agentRunning ? "Agent working…" : "🤖 AI Agent"}
+                </button>
+              </div>
             </div>
 
             {/* Messages */}
@@ -638,24 +714,39 @@ export function BrowserPreview({
                   </div>
                 </div>
               )}
-              {chatMessages.map((msg, i) => (
-                <div key={i} className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                  {msg.role === "ai" && (
-                    <div className="w-6 h-6 rounded-full bg-violet-500/20 border border-violet-500/30 flex items-center justify-center shrink-0 mt-0.5">
-                      <Bot className="w-3.5 h-3.5 text-violet-400" />
+              {chatMessages.map((msg, i) => {
+                if (msg.role === "agent-step") {
+                  return (
+                    <div key={i} className="rounded-xl border border-fuchsia-500/20 bg-fuchsia-500/5 px-3 py-2">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Sparkles className="w-3.5 h-3.5 text-fuchsia-400 shrink-0" />
+                        <span className="text-xs font-bold text-fuchsia-400">
+                          Iteration {msg.step}{msg.total ? ` of ${msg.total}` : ""} — Issues found
+                        </span>
+                      </div>
+                      <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap">{msg.text}</p>
                     </div>
-                  )}
-                  <div
-                    className={`max-w-[80%] rounded-xl px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap break-words ${
-                      msg.role === "user"
-                        ? "bg-violet-600/20 border border-violet-500/20 text-foreground"
-                        : "bg-secondary/80 border border-border/40 text-foreground"
-                    }`}
-                  >
-                    {msg.text}
+                  );
+                }
+                return (
+                  <div key={i} className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                    {msg.role === "ai" && (
+                      <div className="w-6 h-6 rounded-full bg-violet-500/20 border border-violet-500/30 flex items-center justify-center shrink-0 mt-0.5">
+                        <Bot className="w-3.5 h-3.5 text-violet-400" />
+                      </div>
+                    )}
+                    <div
+                      className={`max-w-[80%] rounded-xl px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap break-words ${
+                        msg.role === "user"
+                          ? "bg-violet-600/20 border border-violet-500/20 text-foreground"
+                          : "bg-secondary/80 border border-border/40 text-foreground"
+                      }`}
+                    >
+                      {msg.text}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               {chatLoading && (
                 <div className="flex gap-2 justify-start">
                   <div className="w-6 h-6 rounded-full bg-violet-500/20 border border-violet-500/30 flex items-center justify-center shrink-0">

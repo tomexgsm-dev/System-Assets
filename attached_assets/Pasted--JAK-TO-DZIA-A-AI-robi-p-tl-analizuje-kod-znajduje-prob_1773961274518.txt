@@ -1,0 +1,116 @@
+🚀 JAK TO DZIAŁA
+
+AI robi pętlę:
+
+analizuje kod
+
+znajduje problem
+
+poprawia kod
+
+sprawdza czy działa
+
+powtarza (np. 2–3 razy)
+
+🧠 BACKEND — AI AGENT (GOTOWY)
+
+Dodaj do server.js:
+
+app.post("/agent", async (req, res) => {
+  let { html } = req.body;
+
+  const steps = [];
+
+  for (let i = 0; i < 3; i++) {
+
+    // 🔍 KROK 1 — ANALIZA
+    const analysisRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "llama3-70b-8192",
+        messages: [
+          {
+            role: "system",
+            content: "Analizujesz kod HTML/CSS/JS i znajdujesz błędy."
+          },
+          {
+            role: "user",
+            content: html
+          }
+        ]
+      })
+    });
+
+    const analysisData = await analysisRes.json();
+    const issues = analysisData.choices[0].message.content;
+
+    steps.push({ step: i + 1, issues });
+
+    // 🔧 KROK 2 — POPRAWKA
+    const fixRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "llama3-70b-8192",
+        messages: [
+          {
+            role: "system",
+            content: `
+            Jesteś ekspertem frontend developerem.
+            Popraw kod na podstawie problemów.
+            Zwróć tylko poprawiony kod HTML.
+            `
+          },
+          {
+            role: "user",
+            content: `Kod:\n${html}\n\nProblemy:\n${issues}`
+          }
+        ]
+      })
+    });
+
+    const fixData = await fixRes.json();
+    html = fixData.choices[0].message.content;
+
+  }
+
+  res.json({ finalHTML: html, steps });
+});
+🌐 FRONTEND — PRZYCISK AI AGENT
+
+Dodaj do index.html:
+
+<button onclick="runAgent()">🤖 Auto Napraw AI</button>
+
+<div id="agentLog" style="margin-top:20px;"></div>
+⚙️ JS — OBSŁUGA AGENTA
+async function runAgent() {
+  const log = document.getElementById("agentLog");
+
+  log.innerHTML = "AI pracuje... 🔥";
+
+  const res = await fetch("http://localhost:3000/agent", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ html: aiHTML })
+  });
+
+  const data = await res.json();
+
+  aiHTML = data.finalHTML;
+
+  document.getElementById("preview").srcdoc = aiHTML;
+
+  log.innerHTML = "<h3>Co zrobiło AI:</h3>";
+
+  data.steps.forEach(s => {
+    log.innerHTML += `<div><b>Krok ${s.step}</b>: ${s.issues}</div><br>`;
+  });
+}

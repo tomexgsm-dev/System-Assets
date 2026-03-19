@@ -56,22 +56,27 @@ setInterval(() => {
 
 // ─── System prompts ───────────────────────────────────────────────────────────
 const PLANNER_SYSTEM = `You are a senior software architect.
-Given an app idea, break it into files for a modern web application.
+Given an app idea, plan a complete multi-page website with subpages and navigation.
 
 Return ONLY valid JSON (no markdown, no explanation):
 {
   "files": [
-    {"name": "index.html", "description": "Main HTML entry point with navigation and layout"},
-    {"name": "styles.css", "description": "All CSS styles, animations, and responsive design"},
-    {"name": "app.js", "description": "Application logic, state management, and interactivity"}
+    {"name": "index.html", "description": "Homepage — hero section, overview, call-to-action"},
+    {"name": "about.html", "description": "About page — story, team, values"},
+    {"name": "services.html", "description": "Services/features page — detailed offerings"},
+    {"name": "contact.html", "description": "Contact page — form, location, social links"},
+    {"name": "styles.css", "description": "Shared CSS — variables, layout, typography, components, responsive"},
+    {"name": "app.js", "description": "Shared JS — navigation, scroll effects, form handling, interactivity"}
   ]
 }
 
 Rules:
-- Always include index.html as the first file
-- Maximum 6 files
-- Keep it simple: HTML, CSS, JS only (no build tools, no frameworks)
-- Each file should have a clear, specific purpose`;
+- Always include index.html as the main landing page
+- Add 2-4 additional HTML subpages that make sense for the described app
+- Include shared styles.css and app.js (used by ALL pages)
+- Maximum 8 files total; HTML/CSS/JS only (no frameworks, no build tools)
+- Choose subpage names that fit the app (e.g. menu.html for a restaurant, shop.html for a store)
+- Each file must have a clear, specific, non-overlapping purpose`;
 
 const FILE_SYSTEM = (fileName: string, description: string) =>
   `You are a senior web developer.
@@ -83,26 +88,49 @@ Rules:
 - Return ONLY raw code (no markdown, no code fences, no explanation)
 - Write complete, working code — no placeholders, no TODOs
 - Make it beautiful and professional with modern UI
-- For CSS: include responsive design, animations, and modern styling
-- For JS: include full interactivity, event handlers, and state management`;
+- For CSS: include responsive design, animations, custom properties, and modern styling
+- For JS: include full interactivity, event handlers, smooth scroll, and mobile menu support`;
 
-// Specialized prompt for index.html — generated last so we know exactly which files to link.
-const HTML_SYSTEM = (description: string, otherFiles: string[]) =>
-  `You are a senior web developer.
-Generate a complete index.html file.
+// HTML page generator — knows about ALL other pages and CSS/JS files for navigation.
+const HTML_SYSTEM = (
+  fileName: string,
+  description: string,
+  cssFiles: string[],
+  jsFiles: string[],
+  allHtmlPages: Array<{ name: string; description: string }>
+) => {
+  const navLinks = allHtmlPages
+    .map((p) => {
+      const label = p.name.replace(".html", "").replace(/[-_]/g, " ");
+      const isHome = p.name === "index.html";
+      const displayLabel = isHome
+        ? "Home"
+        : label.charAt(0).toUpperCase() + label.slice(1);
+      return `${displayLabel} → ${p.name}`;
+    })
+    .join(", ");
 
-Purpose: ${description}
+  return `You are a senior web developer building a multi-page website.
+Generate the complete HTML file: ${fileName}
 
-Files in this project that you MUST link: ${otherFiles.join(", ")}
+Page purpose: ${description}
+
+CSS files to link (ALL must be linked in <head>): ${cssFiles.join(", ")}
+JS files to include (ALL must go before </body>): ${jsFiles.join(", ")}
+Navigation pages (ALL must appear in the nav bar): ${navLinks}
 
 Rules:
 - Return ONLY the raw HTML (no markdown, no code fences, no explanation)
-- Start with <!DOCTYPE html> and include <html>, <head>, <body> tags
-- In <head>: add <link rel="stylesheet"> for every .css file listed above
-- Before </body>: add <script src="..."> for every .js file listed above, in dependency order
-- Add a proper page title, meta charset UTF-8, and viewport meta tag
-- The HTML structure and content must match the app described in the purpose
-- Do NOT inline any CSS or JS — reference the separate files only`;
+- Start with <!DOCTYPE html>, include <html lang="en">, <head>, <body>
+- <head>: charset UTF-8, viewport meta, page title, link ALL CSS files
+- Build a professional sticky NAVIGATION BAR at the top that links to EVERY page listed above
+  - Use relative hrefs: href="about.html", href="index.html", etc.
+  - Highlight the current page as active (add class="active" to the current nav link)
+  - Include a mobile hamburger menu that works with app.js
+- Write rich, full content for this specific page — NO lorem ipsum, NO placeholders
+- Before </body>: include ALL JS files
+- Use only relative paths — never absolute paths starting with /`;
+};
 
 // ─── AI helpers ───────────────────────────────────────────────────────────────
 async function planWithOpenAI(prompt: string): Promise<Array<{name: string; description: string}>> {
@@ -132,21 +160,25 @@ async function planWithClaude(prompt: string): Promise<Array<{name: string; desc
   return parsed.files ?? [];
 }
 
+interface HtmlContext {
+  cssFiles: string[];
+  jsFiles: string[];
+  allHtmlPages: Array<{ name: string; description: string }>;
+}
+
 async function generateFileWithOpenAI(
   fileName: string,
   description: string,
   prompt: string,
-  otherFiles?: string[]
+  htmlCtx?: HtmlContext
 ): Promise<string> {
   const isHtml = fileName.endsWith(".html");
-  const systemPrompt = isHtml && otherFiles
-    ? HTML_SYSTEM(description, otherFiles)
+  const systemPrompt = isHtml && htmlCtx
+    ? HTML_SYSTEM(fileName, description, htmlCtx.cssFiles, htmlCtx.jsFiles, htmlCtx.allHtmlPages)
     : FILE_SYSTEM(fileName, description);
 
   const completion = await openai.chat.completions.create({
     model: "gpt-5.2",
-    // gpt-5.2 is a reasoning model — reasoning tokens count against this budget.
-    // Bumped to 32000 so there is room for thinking + full code output.
     max_completion_tokens: 32000,
     messages: [
       { role: "system", content: systemPrompt },
@@ -164,11 +196,11 @@ async function generateFileWithClaude(
   fileName: string,
   description: string,
   prompt: string,
-  otherFiles?: string[]
+  htmlCtx?: HtmlContext
 ): Promise<string> {
   const isHtml = fileName.endsWith(".html");
-  const systemPrompt = isHtml && otherFiles
-    ? HTML_SYSTEM(description, otherFiles)
+  const systemPrompt = isHtml && htmlCtx
+    ? HTML_SYSTEM(fileName, description, htmlCtx.cssFiles, htmlCtx.jsFiles, htmlCtx.allHtmlPages)
     : FILE_SYSTEM(fileName, description);
 
   const message = await anthropic.messages.create({
@@ -309,6 +341,12 @@ async function runGeneration(
 
     const generatedFiles: ProjectFile[] = [];
 
+    // Pre-compute which files are CSS, JS, and HTML pages for each HTML generator
+    const cssFiles = orderedPlan.filter((f) => f.name.endsWith(".css")).map((f) => f.name);
+    const jsFiles = orderedPlan.filter((f) => f.name.endsWith(".js")).map((f) => f.name);
+    const allHtmlPages = orderedPlan.filter((f) => f.name.endsWith(".html"));
+    const htmlCtx: HtmlContext = { cssFiles, jsFiles, allHtmlPages };
+
     for (const file of orderedPlan) {
       // Mark this file as currently being generated
       tasks.set(taskId, {
@@ -316,20 +354,17 @@ async function runGeneration(
         currentFile: file.name,
       });
 
-      const otherFileNames = orderedPlan
-        .filter((f) => f.name !== file.name)
-        .map((f) => f.name);
-
       const rawContent = model === "claude"
-        ? await generateFileWithClaude(file.name, file.description, prompt, otherFileNames)
-        : await generateFileWithOpenAI(file.name, file.description, prompt, otherFileNames);
+        ? await generateFileWithClaude(file.name, file.description, prompt, file.name.endsWith(".html") ? htmlCtx : undefined)
+        : await generateFileWithOpenAI(file.name, file.description, prompt, file.name.endsWith(".html") ? htmlCtx : undefined);
 
       let content = stripCodeFences(rawContent);
 
       // Fallback: if HTML generation still returns empty, build a minimal linking shell.
       if (!content && file.name.endsWith(".html")) {
         console.warn(`[generator] Using fallback HTML for ${file.name}`);
-        content = buildFallbackHtml(file.description, otherFileNames);
+        const allOtherFileNames = orderedPlan.filter((f) => f.name !== file.name).map((f) => f.name);
+        content = buildFallbackHtml(file.description, allOtherFileNames);
       }
 
       generatedFiles.push({
@@ -633,9 +668,63 @@ router.patch("/project/:id", async (req: any, res: Response) => {
   res.json({ ok: true, savedAt: new Date().toISOString() });
 });
 
+// ─── GET /project/:id/:filename — serve individual project file ───────────────
+router.get("/project/:id/:filename", async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id as string, 10);
+  const filename = req.params.filename as string;
+
+  if (isNaN(id)) {
+    res.status(400).send("<html><body>Invalid project ID</body></html>");
+    return;
+  }
+
+  try {
+    const [generation] = await db
+      .select()
+      .from(generationsTable)
+      .where(eq(generationsTable.id, id));
+
+    if (!generation) {
+      res.status(404).send("<html><body><h1>Project not found</h1></body></html>");
+      return;
+    }
+
+    const projectFiles: ProjectFile[] = (generation.files as ProjectFile[]) ?? [
+      { name: "index.html", content: generation.html },
+    ];
+
+    const file = projectFiles.find((f) => f.name === filename);
+    if (!file) {
+      res.status(404).send(`<html><body><h1>File "${filename}" not found</h1></body></html>`);
+      return;
+    }
+
+    if (filename.endsWith(".html")) {
+      // Inject <base href> so relative links between pages resolve correctly
+      const baseTag = `<base href="/api/project/${id}/">`;
+      const content = file.content.replace(/(<head[^>]*>)/i, `$1\n  ${baseTag}`);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("X-Frame-Options", "SAMEORIGIN");
+      res.send(content);
+    } else if (filename.endsWith(".css")) {
+      res.setHeader("Content-Type", "text/css; charset=utf-8");
+      res.send(file.content);
+    } else if (filename.endsWith(".js")) {
+      res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+      res.send(file.content);
+    } else {
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.send(file.content);
+    }
+  } catch (err) {
+    console.error("Serve file error:", String(err));
+    res.status(500).send("<html><body>Error loading file</body></html>");
+  }
+});
+
 // ─── GET /project/:id — serve raw HTML ────────────────────────────────────────
 router.get("/project/:id", async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(req.params.id as string, 10);
   if (isNaN(id)) {
     res.status(400).send("<html><body>Invalid project ID</body></html>");
     return;

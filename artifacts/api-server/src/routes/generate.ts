@@ -7,6 +7,9 @@ import { db, generationsTable, usersTable } from "@workspace/db";
 import { desc, eq, count, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import archiver from "archiver";
+import { minify as minifyHTML } from "html-minifier-terser";
+import CleanCSS from "clean-css";
+import { minify as minifyJS } from "terser";
 import {
   GenerateWebsiteBody,
   GenerateWebsiteResponse,
@@ -495,6 +498,143 @@ function stripCodeFences(code: string): string {
     .trim();
 }
 
+// ─── 1. Minify CSS + JS files ──────────────────────────────────────────────────
+async function minifyProjectFiles(files: ProjectFile[]): Promise<ProjectFile[]> {
+  return Promise.all(
+    files.map(async (file) => {
+      try {
+        if (file.name.endsWith(".css")) {
+          const out = new CleanCSS({ level: 2, returnPromise: false }).minify(file.content);
+          if (out.styles && out.styles.length > 0) {
+            console.log(`[minify] CSS ${file.name}: ${file.content.length} → ${out.styles.length} chars`);
+            return { ...file, content: out.styles };
+          }
+        } else if (file.name.endsWith(".js")) {
+          const result = await minifyJS(file.content, { compress: true, mangle: true });
+          if (result.code && result.code.length > 0) {
+            console.log(`[minify] JS ${file.name}: ${file.content.length} → ${result.code.length} chars`);
+            return { ...file, content: result.code };
+          }
+        }
+      } catch (e: any) {
+        console.warn(`[minify] ${file.name} skipped: ${e?.message}`);
+      }
+      return file;
+    })
+  );
+}
+
+// ─── 2. WCAG contrast check ────────────────────────────────────────────────────
+function checkWcagContrast(files: ProjectFile[]): void {
+  const hexColorRe = /#([0-9a-f]{6}|[0-9a-f]{3})\b/gi;
+  const bgRe   = /background(?:-color)?\s*:\s*(#[0-9a-f]{6}|#[0-9a-f]{3})\b/gi;
+  const textRe = /(?<![a-z-])color\s*:\s*(#[0-9a-f]{6}|#[0-9a-f]{3})\b/gi;
+
+  function hexToRgb(h: string): [number, number, number] {
+    const hex = h.replace("#", "");
+    const full = hex.length === 3
+      ? hex.split("").map((c) => c + c).join("")
+      : hex;
+    const n = parseInt(full, 16);
+    return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
+  }
+
+  function luminance([r, g, b]: [number, number, number]): number {
+    const channel = (c: number) => {
+      const s = c / 255;
+      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+  }
+
+  function contrastRatio(a: string, b: string): number {
+    const la = luminance(hexToRgb(a)) + 0.05;
+    const lb = luminance(hexToRgb(b)) + 0.05;
+    return la > lb ? la / lb : lb / la;
+  }
+
+  for (const file of files) {
+    if (!file.name.endsWith(".css")) continue;
+    const bgs: string[] = [];
+    const colors: string[] = [];
+    let m: RegExpExecArray | null;
+    bgRe.lastIndex = 0; textRe.lastIndex = 0;
+    while ((m = bgRe.exec(file.content)) !== null)   bgs.push(m[1]);
+    while ((m = textRe.exec(file.content)) !== null) colors.push(m[1]);
+
+    for (const bg of bgs) {
+      for (const fg of colors) {
+        const ratio = contrastRatio(bg, fg);
+        if (ratio < 4.5) {
+          console.warn(`[wcag] ${file.name}: contrast ${fg} on ${bg} = ${ratio.toFixed(2)} (min 4.5)`);
+        }
+      }
+    }
+  }
+}
+
+// ─── 3. Groq AI auto-fix HTML ─────────────────────────────────────────────────
+async function autoFixHtmlFiles(files: ProjectFile[]): Promise<ProjectFile[]> {
+  return Promise.all(
+    files.map(async (file) => {
+      if (!file.name.endsWith(".html")) return file;
+
+      const MAX_CHARS = 12000;
+      const snippet = file.content.slice(0, MAX_CHARS);
+      const truncated = file.content.length > MAX_CHARS;
+
+      try {
+        const completion = await groqClient.chat.completions.create({
+          model: GROQ_MODEL,
+          max_tokens: 16000,
+          messages: [
+            {
+              role: "system",
+              content: [
+                "You are an expert frontend developer and HTML/CSS/JS validator.",
+                "Your task: carefully review the given HTML file and fix ONLY real errors:",
+                "- Unclosed or mismatched HTML tags",
+                "- Broken inline <script> or <style> blocks (syntax errors in JS/CSS)",
+                "- Missing DOCTYPE, <html>, <head>, or <body> tags",
+                "- Broken attribute values (quotes not closed, malformed URLs)",
+                "Do NOT change working code, styles, or logic. Do NOT add new features.",
+                "If the code has NO errors, return it UNCHANGED.",
+                "Return ONLY the corrected HTML code — no explanations, no markdown fences.",
+              ].join(" "),
+            },
+            {
+              role: "user",
+              content: truncated
+                ? `[NOTE: File was truncated to ${MAX_CHARS} chars for review]\n\n${snippet}`
+                : snippet,
+            },
+          ],
+        });
+
+        const fixed = completion.choices[0]?.message?.content?.trim() ?? "";
+        const cleaned = stripCodeFences(fixed);
+
+        if (!cleaned || cleaned.length < 100) {
+          console.warn(`[autofix] ${file.name}: Groq returned empty/tiny response, keeping original`);
+          return file;
+        }
+
+        if (truncated) {
+          console.log(`[autofix] ${file.name}: file was truncated — keeping original to avoid partial overwrite`);
+          return file;
+        }
+
+        const gain = file.content.length - cleaned.length;
+        console.log(`[autofix] ${file.name}: fixed (${gain > 0 ? `-${gain}` : `+${-gain}`} chars)`);
+        return { ...file, content: cleaned };
+      } catch (e: any) {
+        console.warn(`[autofix] ${file.name} skipped: ${e?.message}`);
+        return file;
+      }
+    })
+  );
+}
+
 function ensureFullHtml(html: string): string {
   let h = stripCodeFences(html);
   if (!h.toLowerCase().includes("<html")) {
@@ -661,26 +801,35 @@ async function runGeneration(
       });
     }
 
-    // Step 3: Build self-contained preview HTML by inlining all project CSS/JS.
+    // Step 3: Post-process generated files:
+    //   3a. Minify CSS + JS (smaller output, faster load)
+    //   3b. WCAG contrast check (log warnings for low-contrast colour pairs)
+    //   3c. Groq AI auto-fix HTML (correct structural / syntax errors)
+    tasks.set(taskId, { ...tasks.get(taskId)!, status: "postprocessing" as any });
+    let processedFiles = await minifyProjectFiles(generatedFiles);
+    checkWcagContrast(processedFiles);
+    processedFiles = await autoFixHtmlFiles(processedFiles);
+
+    // Step 4: Build self-contained preview HTML by inlining all project CSS/JS.
     // The preview uses srcDoc which has no base URL, so external file references
     // like <link href="styles.css"> would silently fail without this step.
-    const htmlFile = generatedFiles.find((f) => f.name.endsWith(".html"));
+    const htmlFile = processedFiles.find((f) => f.name.endsWith(".html"));
     const rawHtml = ensureFullHtml(htmlFile?.content ?? "<html><body><p>No HTML file generated</p></body></html>");
-    const previewHtml = inlineAssetsIntoHtml(rawHtml, generatedFiles);
+    const previewHtml = inlineAssetsIntoHtml(rawHtml, processedFiles);
 
     // Step 4: Save to DB — update existing row when refining, insert when new
     let generation: typeof generationsTable.$inferSelect;
     if (refineFromId) {
       const [updated] = await db
         .update(generationsTable)
-        .set({ prompt, html: previewHtml, files: generatedFiles })
+        .set({ prompt, html: previewHtml, files: processedFiles })
         .where(and(eq(generationsTable.id, refineFromId), eq(generationsTable.userId, userId)))
         .returning();
       generation = updated;
     } else {
       const [inserted] = await db
         .insert(generationsTable)
-        .values({ prompt, html: previewHtml, userId, files: generatedFiles })
+        .values({ prompt, html: previewHtml, userId, files: processedFiles })
         .returning();
       generation = inserted;
     }
@@ -690,7 +839,7 @@ async function runGeneration(
       generationId: generation.id,
       html: generation.html,
       prompt: generation.prompt,
-      files: generatedFiles,
+      files: processedFiles,
       filesTotal: plan.length,
       filesDone: plan.length,
       createdAt: Date.now(),

@@ -21,11 +21,12 @@ interface BrowserPreviewProps {
 }
 
 const PHASE_LABELS: Record<string, string> = {
-  pending:  "Starting...",
-  planning: "Planning project structure...",
-  building: "Generating files...",
-  done:     "Done!",
-  error:    "Error",
+  pending:         "Starting...",
+  planning:        "Planning project structure...",
+  building:        "Generating files...",
+  postprocessing:  "Optimizing & validating...",
+  done:            "Done!",
+  error:           "Error",
 };
 
 type ViewMode = "preview" | "editor";

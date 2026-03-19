@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export interface GenerationProgress {
-  phase: "pending" | "planning" | "building" | "done" | "error";
+  phase: "pending" | "planning" | "building" | "postprocessing" | "done" | "error";
   filesDone: number;
   filesTotal: number;
   filePlan: Array<{ name: string; description: string }> | null;

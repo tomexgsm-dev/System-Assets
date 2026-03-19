@@ -65,6 +65,11 @@ export function AIProgressPanel({ progress }: Props) {
       entries.push(makeEntry("success", `${name} ready`, undefined, `${n}/${total}`));
     }
 
+    // Phase transition: building → postprocessing
+    if (phase === "postprocessing" && prevPhaseRef.current !== "postprocessing") {
+      entries.push(makeEntry("section", "Optimizing code", "Minifying CSS/JS, checking WCAG contrast, AI auto-fix…"));
+    }
+
     // Done
     if (phase === "done" && prevPhaseRef.current !== "done") {
       entries.push(
@@ -91,7 +96,7 @@ export function AIProgressPanel({ progress }: Props) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [log.length]);
 
-  const isWorking = phase === "planning" || phase === "building";
+  const isWorking = phase === "planning" || phase === "building" || phase === "postprocessing";
   const isDone = phase === "done";
   const isError = phase === "error";
 

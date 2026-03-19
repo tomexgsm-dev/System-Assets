@@ -167,6 +167,17 @@ export function BrowserPreview({
 
         {hasProject && viewMode === "preview" && (
           <div className="flex items-center gap-2">
+            {currentId && (
+              <a
+                href={`${BASE}/api/project/${currentId}/${currentPage}`}
+                download={currentPage}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 text-sm font-medium transition-colors border border-blue-500/20"
+                title={`Download ${currentPage}`}
+              >
+                <Download className="w-4 h-4" />
+                Download Page
+              </a>
+            )}
             {zipUrl && (
               <button
                 onClick={handleDownloadZip}

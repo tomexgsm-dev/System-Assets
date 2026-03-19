@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Sparkles, Loader2, Crown, Wand2, PlusCircle } from "lucide-react";
+import { Sparkles, Loader2, Crown, Wand2, PlusCircle, Zap } from "lucide-react";
 
 type Model = "openai" | "claude" | "groq";
 
@@ -18,6 +18,39 @@ const MODEL_OPTIONS: { value: Model; label: string; badge: string; color: string
   { value: "groq", label: "Groq", badge: "Llama 3.3", color: "from-violet-500 to-purple-600" },
 ];
 
+const TEMPLATES: { icon: string; label: string; prompt: string }[] = [
+  {
+    icon: "🏋️",
+    label: "Fitness",
+    prompt: "Modern fitness gym landing page with hero video background, class schedule, trainer profiles, membership pricing tiers, and motivational testimonials. Dark theme with electric blue and neon green accents.",
+  },
+  {
+    icon: "📷",
+    label: "Portfolio",
+    prompt: "Elegant photography portfolio website with full-screen hero gallery, masonry photo grid, about me page, services & pricing, and contact form. Minimal dark aesthetic with elegant typography.",
+  },
+  {
+    icon: "🛒",
+    label: "Online Store",
+    prompt: "Modern e-commerce store for handmade jewelry with product grid, product detail pages, shopping cart UI, about the artisan, and contact. Warm gold and cream color palette.",
+  },
+  {
+    icon: "🚀",
+    label: "SaaS App",
+    prompt: "Futuristic SaaS landing page for an AI productivity tool. Features: animated hero with dashboard mockup, feature highlights, how-it-works steps, pricing table (free/pro/enterprise), and FAQ. Dark mode with purple and cyan gradients.",
+  },
+  {
+    icon: "🍕",
+    label: "Restaurant",
+    prompt: "Upscale Italian restaurant website with hero food photography, full menu with categories (antipasti, pasta, mains, desserts), reservation booking form, chef story, and location map. Warm red and cream palette.",
+  },
+  {
+    icon: "💼",
+    label: "Agency",
+    prompt: "Creative digital agency website with bold animated hero, services (branding, web, social), portfolio case studies, team page with bios, client logos, and contact. Black and gold luxury aesthetic.",
+  },
+];
+
 export function PromptSection({ onSubmit, isLoading, currentPrompt, refineId, limitError, onUpgrade }: PromptSectionProps) {
   const [prompt, setPrompt] = useState("");
   const [model, setModel] = useState<Model>("openai");
@@ -29,13 +62,18 @@ export function PromptSection({ onSubmit, isLoading, currentPrompt, refineId, li
     onSubmit(prompt, model, refineMode && refineId ? refineId : undefined);
   };
 
+  const handleTemplate = (tpl: typeof TEMPLATES[0]) => {
+    if (isLoading) return;
+    setPrompt(tpl.prompt);
+    setRefineMode(false);
+  };
+
   React.useEffect(() => {
     if (currentPrompt && !isLoading) {
       setPrompt(currentPrompt);
     }
   }, [currentPrompt, isLoading]);
 
-  // Default to refine mode whenever a project is loaded
   React.useEffect(() => {
     if (refineId) setRefineMode(true);
     else setRefineMode(false);
@@ -45,11 +83,33 @@ export function PromptSection({ onSubmit, isLoading, currentPrompt, refineId, li
   const isRefining = refineMode && !!refineId;
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-6 py-8 relative z-20">
+    <div className="w-full max-w-4xl mx-auto px-6 pt-6 pb-4 relative z-20">
       <div className="mb-4 text-center">
-        <h2 className="text-3xl font-display font-bold text-foreground mb-2">What will you build today?</h2>
-        <p className="text-muted-foreground">Describe the website you want, and our AI will generate the layout instantly.</p>
+        <h2 className="text-3xl font-display font-bold text-foreground mb-1">What will you build today?</h2>
+        <p className="text-muted-foreground text-sm">Describe your site, or pick a template below — AI generates it live.</p>
       </div>
+
+      {/* Quick template buttons */}
+      {!refineId && (
+        <div className="mb-4 flex items-center gap-2 flex-wrap justify-center">
+          <span className="text-xs text-muted-foreground flex items-center gap-1 mr-1">
+            <Zap className="w-3 h-3" />
+            Quick start:
+          </span>
+          {TEMPLATES.map((tpl) => (
+            <button
+              key={tpl.label}
+              type="button"
+              onClick={() => handleTemplate(tpl)}
+              disabled={isLoading || !!limitError}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border border-border/60 bg-card hover:border-primary/50 hover:bg-primary/5 text-foreground transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm hover:-translate-y-0.5"
+            >
+              <span>{tpl.icon}</span>
+              {tpl.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {limitError && (
         <div className="mb-4 flex items-center justify-between gap-4 bg-orange-500/10 border border-orange-500/30 rounded-xl px-4 py-3">
@@ -72,7 +132,8 @@ export function PromptSection({ onSubmit, isLoading, currentPrompt, refineId, li
       <form onSubmit={handleSubmit} className="relative group">
         <div className="absolute -inset-1 bg-gradient-to-r from-primary/30 to-accent/30 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-500"></div>
         <div className="relative bg-card border border-border/50 rounded-2xl shadow-xl overflow-hidden focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/50 transition-all">
-          {/* Refine / New site banner */}
+
+          {/* Refine / New site toggle */}
           {refineId && (
             <div className="flex items-center gap-1 px-4 pt-3 pb-0">
               <div className="flex items-center rounded-lg border border-border/50 bg-muted/40 p-0.5">
@@ -117,10 +178,10 @@ export function PromptSection({ onSubmit, isLoading, currentPrompt, refineId, li
             disabled={isLoading || limitError}
             placeholder={
               isRefining
-                ? "E.g. Make the navbar dark, add a pricing section, change the color to blue..."
-                : "E.g. A sleek landing page for a futuristic AI SaaS startup with dark mode, glowing buttons, hero section, pricing, and CTA..."
+                ? "E.g. Make the navbar dark, add a pricing section, change the accent color to blue..."
+                : "E.g. A futuristic AI SaaS landing page with dark mode, glassmorphism cards, animated hero, pricing table, and smooth scroll..."
             }
-            className="w-full bg-transparent p-5 min-h-[110px] resize-none text-foreground placeholder:text-muted-foreground/60 focus:outline-none disabled:opacity-50 font-body text-base leading-relaxed"
+            className="w-full bg-transparent p-5 min-h-[100px] resize-none text-foreground placeholder:text-muted-foreground/60 focus:outline-none disabled:opacity-50 font-body text-base leading-relaxed"
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();
@@ -162,7 +223,7 @@ export function PromptSection({ onSubmit, isLoading, currentPrompt, refineId, li
               </div>
               <button
                 type="submit"
-                disabled={isLoading || !prompt.trim() || limitError}
+                disabled={isLoading || !prompt.trim() || !!limitError}
                 className={`px-5 py-2.5 rounded-xl font-bold text-sm bg-gradient-to-r ${selected.color} text-white shadow-lg hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none transition-all duration-200 flex items-center gap-2`}
               >
                 {isLoading ? (

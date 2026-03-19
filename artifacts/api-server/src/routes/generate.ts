@@ -87,17 +87,35 @@ Rules:
 - Each file must have a clear, specific, non-overlapping purpose`;
 
 const FILE_SYSTEM = (fileName: string, description: string) =>
-  `You are a senior web developer.
-Generate complete, production-quality code for the file: ${fileName}
+  `You are an expert frontend developer. Generate complete, production-quality, stunning code for: ${fileName}
 
 Purpose: ${description}
 
-Rules:
-- Return ONLY raw code (no markdown, no code fences, no explanation)
-- Write complete, working code — no placeholders, no TODOs
-- Make it beautiful and professional with modern UI
-- For CSS: include responsive design, animations, custom properties, and modern styling
-- For JS: include full interactivity, event handlers, smooth scroll, and mobile menu support`;
+MANDATORY REQUIREMENTS — every rule below is non-negotiable:
+- Return ONLY raw code. No markdown, no code fences, no explanation whatsoever.
+- Write 100% complete, working code — zero placeholders, zero TODOs, zero lorem ipsum.
+
+CSS rules (styles.css):
+- Mobile-first responsive design using CSS Grid + Flexbox
+- CSS custom properties (--primary, --accent, --bg, --text, --radius, etc.)
+- Smooth transitions and hover effects on every interactive element
+- Scroll-based reveal animations using the .aos-animate pattern (compatible with AOS library)
+- Glassmorphism cards: backdrop-filter: blur(12px); background: rgba(255,255,255,0.08)
+- Gradient backgrounds, gradient text (background-clip: text)
+- Custom scrollbar styling
+- Sticky navigation with backdrop-filter blur on scroll
+- Hamburger mobile menu animation (☰ → ✕)
+- @media breakpoints: 480px, 768px, 1024px, 1280px
+
+JS rules (app.js):
+- html { scroll-behavior: smooth; } applied via JS if not in CSS
+- Intersection Observer for scroll-reveal animations (add/remove "visible" class)
+- Mobile hamburger menu toggle with body scroll lock
+- Active nav link highlighting based on current page
+- Smooth parallax effect on hero section
+- Counter animation for stats (0 → target number on scroll)
+- Form validation with real-time feedback
+- Initialize AOS: AOS.init({ duration: 800, once: true }) if AOS is present`;
 
 // ─── Refinement context builders ──────────────────────────────────────────────
 interface PreviousGeneration {
@@ -213,26 +231,44 @@ const HTML_SYSTEM = (
     })
     .join(", ");
 
-  return `You are a senior web developer building a multi-page website.
-Generate the complete HTML file: ${fileName}
+  return `You are an expert frontend developer creating a stunning, modern multi-page website.
+Generate the COMPLETE HTML file: ${fileName}
 
 Page purpose: ${description}
 
-CSS files to link (ALL must be linked in <head>): ${cssFiles.join(", ")}
+CSS files to link (ALL must be in <head>): ${cssFiles.join(", ")}
 JS files to include (ALL must go before </body>): ${jsFiles.join(", ")}
 Navigation pages (ALL must appear in the nav bar): ${navLinks}
 
-Rules:
-- Return ONLY the raw HTML (no markdown, no code fences, no explanation)
-- Start with <!DOCTYPE html>, include <html lang="en">, <head>, <body>
-- <head>: charset UTF-8, viewport meta, page title, link ALL CSS files
-- Build a professional sticky NAVIGATION BAR at the top that links to EVERY page listed above
-  - Use relative hrefs: href="about.html", href="index.html", etc.
-  - Highlight the current page as active (add class="active" to the current nav link)
-  - Include a mobile hamburger menu that works with app.js
-- Write rich, full content for this specific page — NO lorem ipsum, NO placeholders
-- Before </body>: include ALL JS files
-- Use only relative paths — never absolute paths starting with /`;
+MANDATORY REQUIREMENTS — every rule is non-negotiable:
+- Return ONLY raw HTML. No markdown, no code fences, no explanation.
+- Start with <!DOCTYPE html> with <html lang="en">, complete <head>, full <body>
+
+<head> must contain:
+  - charset UTF-8, viewport meta (width=device-width, initial-scale=1.0)
+  - Descriptive <title>
+  - Link to ALL CSS files listed above
+  - AOS animation library CSS: <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+  - Google Fonts link for a modern font (e.g. Inter, Poppins, or Raleway)
+
+Body content:
+  - Professional STICKY nav bar with links to EVERY page listed above
+    - href="index.html", href="about.html" etc. (relative hrefs, never absolute /)
+    - Add class="active" to the current page's nav link
+    - Include a hamburger button for mobile menu (works with app.js)
+  - Rich, detailed, REAL content for this page — real text, real data, real copy
+    - NO lorem ipsum, NO placeholder text, NO "coming soon"
+  - Add data-aos="fade-up" (or fade-right, zoom-in, etc.) to sections/cards for scroll animations
+  - Sections should include: hero, features/services, stats with real numbers, testimonials or team, CTA
+  - Use semantic HTML5 tags: <header>, <nav>, <main>, <section>, <article>, <footer>
+  - Each section should have an id for smooth-scroll anchor links
+
+Before </body>:
+  - Include ALL JS files listed above
+  - AOS init script: <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+    followed by: <script>AOS.init({ duration: 800, easing: 'ease-in-out', once: true });</script>
+
+- Use ONLY relative paths — never absolute paths starting with /`;
 };
 
 // ─── AI helpers ───────────────────────────────────────────────────────────────

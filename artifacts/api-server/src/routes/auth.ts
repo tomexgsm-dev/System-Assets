@@ -105,6 +105,9 @@ router.get("/auth/me", async (req, res) => {
       return;
     }
 
+    // Always keep session in sync with DB (plan may have changed externally)
+    req.session.plan = user.plan;
+
     res.json(user);
   } catch (err) {
     console.error("Me error:", String(err));

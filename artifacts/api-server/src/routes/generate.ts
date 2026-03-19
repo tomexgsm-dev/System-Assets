@@ -683,7 +683,15 @@ router.post("/generate", generateRateLimit, async (req: any, res: Response) => {
   const { prompt, model = "openai", refineFromId, imageBase64, imageMimeType } = parsed.data;
   const img: ImageData | undefined = imageBase64 && imageMimeType ? { base64: imageBase64, mimeType: imageMimeType } : undefined;
   const userId = req.session.userId;
-  const plan = req.session.plan ?? "free";
+
+  // Always read plan fresh from DB so admin upgrades take effect without re-login
+  const [userRow] = await db
+    .select({ plan: usersTable.plan })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId))
+    .limit(1);
+  const plan = userRow?.plan ?? req.session.plan ?? "free";
+  req.session.plan = plan; // keep session in sync
 
   // ── Prompt cache: return existing generation for same prompt ────────────────
   // Skip cache entirely when refining — we must generate fresh to apply changes.

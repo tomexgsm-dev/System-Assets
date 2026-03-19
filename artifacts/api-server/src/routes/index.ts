@@ -7,6 +7,7 @@ import deployRouter from "./deploy";
 import styleRouter from "./style";
 import chatRouter from "./chat";
 import autoBusinessRouter from "./auto-business";
+import seoRouter from "./seo";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(deployRouter);
 router.use(styleRouter);
 router.use(chatRouter);
 router.use(autoBusinessRouter);
+router.use(seoRouter);
 
 export default router;

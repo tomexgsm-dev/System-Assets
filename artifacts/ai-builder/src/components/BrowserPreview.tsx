@@ -4,7 +4,7 @@ import {
   Copy, Check, LayoutTemplate, Monitor, Sparkles,
   ExternalLink, Download, FileCode2, Layers, Code2, Eye, Globe,
   Rocket, X, Link, Crown, Blocks, MessageSquare, Wrench, Send,
-  ChevronDown, ChevronUp, Bot,
+  ChevronDown, ChevronUp, Bot, TrendingUp, Search, Lightbulb,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { CodeEditor } from "@/components/CodeEditor";
@@ -66,6 +66,13 @@ export function BrowserPreview({
   const [chatLoading, setChatLoading] = useState(false);
   const [agentRunning, setAgentRunning] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // ── SEO state ──
+  const [showSeo, setShowSeo] = useState(false);
+  const [seoKeyword, setSeoKeyword] = useState("");
+  const [seoState, setSeoState] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [seoSuggestState, setSeoSuggestState] = useState<"idle" | "loading">("idle");
+  const [seoKeywords, setSeoKeywords] = useState<string[]>([]);
 
   const { toast } = useToast();
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -306,6 +313,50 @@ export function BrowserPreview({
     }
   };
 
+  // ── SEO handlers ──
+  const handleSeoOptimize = async () => {
+    if (!currentHtml || !seoKeyword.trim() || seoState === "loading") return;
+    setSeoState("loading");
+    try {
+      const res = await fetch(`${BASE}/api/seo`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ html: currentHtml, keyword: seoKeyword.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "SEO optimization failed");
+      setLiveHtml(data.html);
+      onHtmlChange?.(data.html);
+      setSeoState("done");
+      toast({ title: "SEO optimized!", description: `Page optimized for "${seoKeyword}"` });
+    } catch (err: any) {
+      setSeoState("error");
+      toast({ title: "SEO failed", description: err.message ?? "Unexpected error", variant: "destructive" });
+    }
+  };
+
+  const handleSeoSuggest = async () => {
+    if (!currentHtml || seoSuggestState === "loading") return;
+    setSeoSuggestState("loading");
+    setSeoKeywords([]);
+    try {
+      const res = await fetch(`${BASE}/api/seo/keywords`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ html: currentHtml }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Keyword generation failed");
+      setSeoKeywords(data.keywords ?? []);
+    } catch (err: any) {
+      toast({ title: "Keyword suggestion failed", description: err.message, variant: "destructive" });
+    } finally {
+      setSeoSuggestState("idle");
+    }
+  };
+
   const phaseLabel   = PHASE_LABELS[progress.phase] ?? "Working...";
   const showProgress = progress.phase === "building" && progress.filesTotal > 0;
   const hasProject   = !!html && !!currentId && !isLoading;
@@ -374,6 +425,22 @@ export function BrowserPreview({
               <Bot className="w-3.5 h-3.5" />
               AI Chat
               {showChat ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
+          )}
+
+          {/* SEO toggle */}
+          {hasProject && (
+            <button
+              onClick={() => setShowSeo((v) => !v)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                showSeo
+                  ? "bg-green-500/20 border-green-500/40 text-green-400"
+                  : "bg-secondary/70 hover:bg-secondary border-border/50 text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <TrendingUp className="w-3.5 h-3.5" />
+              SEO
+              {showSeo ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
             </button>
           )}
         </div>
@@ -783,6 +850,148 @@ export function BrowserPreview({
                 <Send className="w-3.5 h-3.5" />
                 Send
               </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── SEO Panel ── */}
+      <AnimatePresence>
+        {showSeo && hasProject && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="mt-3 rounded-2xl border border-green-500/30 bg-card/80 backdrop-blur-sm overflow-hidden"
+          >
+            {/* SEO header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border/40 bg-green-500/5">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-green-400" />
+                <span className="text-sm font-semibold text-foreground">SEO Optimizer</span>
+                <span className="text-xs text-muted-foreground hidden sm:inline">— optimize your page for search engines</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSeoSuggest}
+                  disabled={seoSuggestState === "loading"}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs font-semibold border border-amber-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {seoSuggestState === "loading" ? (
+                    <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  ) : (
+                    <Lightbulb className="w-3.5 h-3.5" />
+                  )}
+                  {seoSuggestState === "loading" ? "Analyzing…" : "AI Keywords"}
+                </button>
+              </div>
+            </div>
+
+            <div className="px-4 py-4 flex flex-col gap-3">
+              {/* Suggested keywords */}
+              {seoKeywords.length > 0 && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1.5">
+                    <Lightbulb className="w-3.5 h-3.5 text-amber-400" />
+                    Suggested keywords — click to use:
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {seoKeywords.map((kw) => (
+                      <button
+                        key={kw}
+                        onClick={() => setSeoKeyword(kw)}
+                        className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                          seoKeyword === kw
+                            ? "bg-green-500/20 border-green-500/40 text-green-400"
+                            : "bg-secondary/70 hover:bg-secondary border-border/50 text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {kw}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {seoSuggestState === "idle" && seoKeywords.length === 0 && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <Lightbulb className="w-3.5 h-3.5 text-amber-400/50" />
+                  Click <strong className="text-foreground">AI Keywords</strong> to get suggestions based on your page content.
+                </p>
+              )}
+
+              {/* Keyword input + optimize button */}
+              <div className="flex gap-2 items-center">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                  <input
+                    type="text"
+                    value={seoKeyword}
+                    onChange={(e) => setSeoKeyword(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") handleSeoOptimize(); }}
+                    placeholder="e.g. barber shop Warsaw, SaaS landing page…"
+                    disabled={seoState === "loading"}
+                    className="w-full text-sm bg-secondary/60 border border-border/50 rounded-xl pl-9 pr-3 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/20 disabled:opacity-50"
+                  />
+                </div>
+                <button
+                  onClick={handleSeoOptimize}
+                  disabled={seoState === "loading" || !seoKeyword.trim()}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-green-600 hover:bg-green-500 text-white text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm shrink-0"
+                >
+                  {seoState === "loading" ? (
+                    <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  ) : (
+                    <TrendingUp className="w-3.5 h-3.5" />
+                  )}
+                  {seoState === "loading" ? "Optimizing…" : "Optimize SEO"}
+                </button>
+              </div>
+
+              {/* Status feedback */}
+              {seoState === "done" && (
+                <div className="flex items-center gap-2 text-xs text-green-400 bg-green-500/10 border border-green-500/20 rounded-xl px-3 py-2">
+                  <Check className="w-3.5 h-3.5 shrink-0" />
+                  Page successfully optimized for <strong>"{seoKeyword}"</strong>. Meta tags, headings and alt attributes updated.
+                </div>
+              )}
+              {seoState === "error" && (
+                <div className="flex items-center gap-2 text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">
+                  <X className="w-3.5 h-3.5 shrink-0" />
+                  SEO optimization failed. Please try again.
+                </div>
+              )}
+
+              {/* Info row */}
+              <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t border-border/30">
+                <span>Adds: title · meta description · H1-H3 · alt tags · semantic HTML</span>
+                <div className="flex items-center gap-3">
+                  <a
+                    href={`${BASE}/sitemap.xml`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 hover:text-foreground transition-colors"
+                  >
+                    <Globe className="w-3 h-3" />
+                    sitemap.xml
+                  </a>
+                  <a
+                    href={`${BASE}/robots.txt`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 hover:text-foreground transition-colors"
+                  >
+                    <Globe className="w-3 h-3" />
+                    robots.txt
+                  </a>
+                </div>
+              </div>
             </div>
           </motion.div>
         )}

@@ -1,0 +1,177 @@
+📁 Struktura plików
+/index.html          → Builder + live preview + toolbar
+/style.css           → Minimalistyczny styl
+/builder.js          → Drag & Drop + AI + SEO + szablony
+/dashboard.html      → Panel użytkownika (kredyty, PRO, statystyki)
+/server.js           → Backend: Supabase + Stripe + AI Agent + SEO + AutoBiz
+/templates/          → Gotowe szablony stron
+🌐 index.html – FULL VERSION
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<title>AI Lovable 1:1 Builder</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="container">
+<h1>AI Lovable 1:1 Builder 🚀</h1>
+
+<!-- TOOLBAR -->
+<div class="toolbar">
+  <button onclick="addSection('hero')">Dodaj Hero</button>
+  <button onclick="addSection('menu')">Dodaj Oferta</button>
+  <button onclick="addSection('contact')">Dodaj Kontakt</button>
+  <select id="templateSelect" onchange="loadTemplate(this.value)">
+    <option value="">Wybierz szablon</option>
+    <option value="restaurant">Restauracja</option>
+    <option value="barber">Barber Shop</option>
+    <option value="shop">Sklep online</option>
+    <option value="portfolio">Portfolio</option>
+  </select>
+  <button onclick="runAgent()">🤖 Auto Napraw AI</button>
+  <input id="keyword" placeholder="Fraza SEO np. burger Łódź">
+  <button onclick="seo()">🚀 SEO</button>
+  <button onclick="exportHTML()">📦 Eksport HTML</button>
+  <button onclick="exportWordPress()">WP Export</button>
+</div>
+
+<!-- BUILDER / Drag & Drop -->
+<div id="builder" class="builder dropzone">
+</div>
+
+<!-- LIVE PREVIEW -->
+<h2>Podgląd strony</h2>
+<iframe id="preview" style="width:100%; height:500px; border:1px solid #333;"></iframe>
+
+</div>
+
+<script src="builder.js"></script>
+</body>
+</html>
+🎨 style.css – FULL
+body { font-family: Arial; margin:0; background:#0f0f0f; color:white; }
+.container { max-width:1000px; margin:auto; padding:20px; }
+.toolbar { margin-bottom:20px; }
+.toolbar button, .toolbar input, .toolbar select { margin-right:10px; padding:10px; cursor:pointer; }
+.builder { min-height:400px; background:#1a1a1a; padding:10px; border-radius:10px; }
+section { padding:20px; margin:10px 0; border:1px solid #333; border-radius:10px; }
+button { padding:10px 20px; cursor:pointer; }
+⚙️ builder.js – FULL DRAG & DROP + AI + SEO + TEMPLATES + EXPORT
+let aiHTML = "";
+
+// --- DRAG & DROP ---
+let dragged;
+document.addEventListener("dragstart", e => dragged = e.target);
+document.addEventListener("dragover", e => e.preventDefault());
+document.addEventListener("drop", e => {
+  if(e.target.classList.contains("dropzone")){
+    e.target.appendChild(dragged);
+    aiHTML = document.getElementById("builder").innerHTML;
+    updatePreview();
+  }
+});
+
+// --- ADD SECTION ---
+function addSection(type){
+  const builder = document.getElementById("builder");
+  let section = document.createElement("section");
+  section.setAttribute("draggable", true);
+
+  if(type === 'hero'){
+    section.innerHTML = `<h1>Twoja Strona</h1><p>Opis / slogan</p><button>Zamów teraz</button>`;
+  }
+  if(type === 'menu'){
+    section.innerHTML = `<h2>Oferta</h2><div>Basic</div><div>Premium</div><div>VIP</div>`;
+  }
+  if(type === 'contact'){
+    section.innerHTML = `<h2>Kontakt</h2><form><input placeholder="Imię"><input placeholder="Email"><button>Wyślij</button></form>`;
+  }
+
+  builder.appendChild(section);
+  aiHTML = builder.innerHTML;
+  updatePreview();
+}
+
+// --- LOAD TEMPLATE ---
+function loadTemplate(name){
+  fetch(`/templates/${name}.html`).then(r=>r.text()).then(t=>{
+    document.getElementById("builder").innerHTML = t;
+    aiHTML = t;
+    updatePreview();
+  });
+}
+
+// --- LIVE PREVIEW ---
+function updatePreview(){
+  document.getElementById("preview").srcdoc = aiHTML;
+}
+
+// --- AI AGENT ---
+async function runAgent(){
+  const res = await fetch("http://localhost:3000/agent", {
+    method:"POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ html: aiHTML })
+  });
+  const data = await res.json();
+  aiHTML = data.finalHTML;
+  updatePreview();
+  alert("AI Agent poprawił stronę 🔥");
+}
+
+// --- AUTO SEO ---
+async function seo(){
+  const keyword = document.getElementById("keyword").value;
+  const res = await fetch("http://localhost:3000/seo", {
+    method:"POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ html: aiHTML, keyword })
+  });
+  const data = await res.json();
+  aiHTML = data.html;
+  updatePreview();
+  alert("SEO zoptymalizowane 🚀");
+}
+
+// --- EXPORT HTML ---
+function exportHTML(){
+  const blob = new Blob([aiHTML], {type:"text/html"});
+  const link = document.createElement("a");
+  link.download = "strona.html";
+  link.href = URL.createObjectURL(blob);
+  link.click();
+}
+
+// --- EXPORT WORDPRESS (PROSTA KONWERSJA) ---
+function exportWordPress(){
+  let wpHTML = `<?php /* WordPress Template */ ?>\n` + aiHTML;
+  const blob = new Blob([wpHTML], {type:"text/html"});
+  const link = document.createElement("a");
+  link.download = "wp-strona.php";
+  link.href = URL.createObjectURL(blob);
+  link.click();
+}
+📁 /templates/restaurant.html (przykładowy szablon)
+<section class="hero">
+  <h1>Burger King Łódź 🍔</h1>
+  <p>Najlepsze burgery w mieście</p>
+  <button>Zamów teraz</button>
+</section>
+
+<section class="menu">
+  <h2>Oferta</h2>
+  <div>Basic – 25 zł</div>
+  <div>Premium – 40 zł</div>
+  <div>VIP – 60 zł</div>
+</section>
+
+<section class="contact">
+  <h2>Kontakt</h2>
+  <form>
+    <input placeholder="Twoje imię">
+    <input placeholder="Email">
+    <button>Wyślij</button>
+  </form>
+</section>

@@ -61,4 +61,27 @@ app.use(
 
 app.use("/api", router);
 
+// ── SEO static files (root-level, required by search engines) ──
+app.get("/sitemap.xml", (_req, res) => {
+  res.header("Content-Type", "application/xml");
+  res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://nexus-builder.app/</loc>
+    <priority>1.0</priority>
+    <changefreq>weekly</changefreq>
+  </url>
+  <url>
+    <loc>https://nexus-builder.app/dashboard</loc>
+    <priority>0.8</priority>
+    <changefreq>monthly</changefreq>
+  </url>
+</urlset>`);
+});
+
+app.get("/robots.txt", (_req, res) => {
+  res.type("text/plain");
+  res.send(`User-agent: *\nAllow: /\nSitemap: https://nexus-builder.app/sitemap.xml`);
+});
+
 export default app;

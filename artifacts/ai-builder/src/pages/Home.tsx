@@ -86,7 +86,8 @@ export default function Home() {
           setCurrentFiles(data.files ?? null);
         },
         onError: (error: any) => {
-          if (error?.data?.error === "limit_reached") {
+          const errCode = error?.data?.error;
+          if (errCode === "limit_reached" || errCode === "no_credits") {
             setLimitError(true);
           }
         },

@@ -7,7 +7,7 @@ import { useAuth } from "@/hooks/use-auth";
 import type { Generation } from "@workspace/api-client-react/src/generated/api.schemas";
 import { StyleSettings } from "@/components/StyleSettings";
 
-const FREE_LIMIT = 3;
+const FREE_STARTING_CREDITS = 10;
 
 interface SidebarProps {
   onSelectGeneration: (generation: Generation) => void;
@@ -26,14 +26,8 @@ export function Sidebar({ onSelectGeneration, activeId }: SidebarProps) {
   );
 
   const isPro = user?.plan === "pro";
-  const genCount = generations?.length ?? 0;
-  const dailyGenCount   = user?.dailyGenCount   ?? 0;
-  const monthlyGenCount = user?.monthlyGenCount  ?? 0;
-  const FREE_DAILY_GEN   = 3;
-  const FREE_MONTHLY_GEN = 30;
-  const atDailyLimit   = !isPro && dailyGenCount   >= FREE_DAILY_GEN;
-  const atMonthlyLimit = !isPro && monthlyGenCount >= FREE_MONTHLY_GEN;
-  const atLimit = atDailyLimit || atMonthlyLimit;
+  const credits = isPro ? Infinity : (user?.credits ?? FREE_STARTING_CREDITS);
+  const outOfCredits = !isPro && credits <= 0;
 
   return (
     <div className="w-80 flex-shrink-0 h-full flex flex-col bg-card/80 backdrop-blur-xl border-r border-border/50 relative z-20">
@@ -57,9 +51,9 @@ export function Sidebar({ onSelectGeneration, activeId }: SidebarProps) {
               <p className="text-[11px] text-muted-foreground">
                 {isPro
                   ? "PRO — Unlimited"
-                  : atDailyLimit
-                  ? `Daily limit reached (resets midnight UTC)`
-                  : `${dailyGenCount}/${FREE_DAILY_GEN} today · ${monthlyGenCount}/${FREE_MONTHLY_GEN} this month`}
+                  : outOfCredits
+                  ? "No credits left 💸"
+                  : `${credits} credit${credits === 1 ? "" : "s"} remaining`}
               </p>
             </div>
             <div className="flex items-center gap-1">
@@ -87,26 +81,28 @@ export function Sidebar({ onSelectGeneration, activeId }: SidebarProps) {
             </div>
           </div>
 
-          {/* Plan limit bar */}
+          {/* Credit bar */}
           {!isPro && (
             <div className="mt-2 space-y-1">
               <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                <span>Today</span>
-                <span className={atDailyLimit ? "text-orange-500 font-semibold" : ""}>{dailyGenCount}/{FREE_DAILY_GEN}</span>
+                <span>Credits</span>
+                <span className={outOfCredits ? "text-orange-500 font-semibold" : ""}>
+                  {credits}/{FREE_STARTING_CREDITS}
+                </span>
               </div>
               <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                 <div
-                  className={`h-full rounded-full transition-all ${atDailyLimit ? "bg-orange-500" : "bg-primary"}`}
-                  style={{ width: `${Math.min((dailyGenCount / FREE_DAILY_GEN) * 100, 100)}%` }}
+                  className={`h-full rounded-full transition-all ${outOfCredits ? "bg-orange-500" : credits <= 3 ? "bg-amber-500" : "bg-primary"}`}
+                  style={{ width: `${Math.min((credits / FREE_STARTING_CREDITS) * 100, 100)}%` }}
                 />
               </div>
-              {atLimit && (
+              {outOfCredits && (
                 <button
                   onClick={() => navigate("/dashboard")}
                   className="w-full mt-2 text-xs bg-gradient-to-r from-primary to-accent text-white font-semibold py-1.5 rounded-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-1"
                 >
                   <Crown className="w-3 h-3" />
-                  Upgrade to PRO — $9.99
+                  Upgrade to PRO — $9.99/mo
                 </button>
               )}
             </div>

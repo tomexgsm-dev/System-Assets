@@ -5,10 +5,7 @@ export interface AuthUser {
   id: number;
   email: string;
   plan: "free" | "pro";
-  dailyGenCount?: number;
-  monthlyGenCount?: number;
-  dailyPubCount?: number;
-  monthlyPubCount?: number;
+  credits?: number;
 }
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");

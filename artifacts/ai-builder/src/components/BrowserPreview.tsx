@@ -145,7 +145,7 @@ export function BrowserPreview({
         if (data.error === "netlify_not_configured") {
           setPublishState("error");
           setPublishedUrl("__not_configured__");
-        } else if (data.error === "publish_limit") {
+        } else if (data.error === "publish_limit" || data.error === "no_credits") {
           setPublishState("error");
           setPublishedUrl("__publish_limit__");
         } else {
@@ -178,8 +178,8 @@ export function BrowserPreview({
       });
       const data = await res.json();
       if (!res.ok) {
-        if (data.error === "publish_limit") {
-          setWpError("Limit publikacji osiągnięty. Przejdź na plan PRO.");
+        if (data.error === "publish_limit" || data.error === "no_credits") {
+          setWpError("No credits left 💸 — upgrade to PRO for unlimited publishing.");
         } else {
           setWpError(data.message ?? "Błąd publikacji");
         }
@@ -753,9 +753,9 @@ export function BrowserPreview({
                     <Rocket className="w-8 h-8 text-orange-500" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-foreground mb-1">Free publish limit reached</h3>
+                    <h3 className="text-lg font-bold text-foreground mb-1">No credits left 💸</h3>
                     <p className="text-sm text-muted-foreground mb-3">
-                      The free plan allows <strong>3 published sites</strong>. Upgrade to PRO for unlimited one-click publishing at <strong>$9.99/month</strong>.
+                      The free plan includes <strong>10 credits</strong> for generations &amp; publishing. Upgrade to PRO for unlimited use at <strong>$9.99/month</strong>.
                     </p>
                     <a
                       href="/dashboard"

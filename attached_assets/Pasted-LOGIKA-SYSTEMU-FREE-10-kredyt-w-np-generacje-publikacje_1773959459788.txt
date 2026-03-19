@@ -1,0 +1,134 @@
+LOGIKA SYSTEMU
+🆓 FREE
+
+10 kredytów (np. generacje / publikacje)
+
+💎 PRO (49 zł/miesiąc)
+
+nielimitowane użycie
+
+reset co miesiąc
+
+1️⃣ Supabase — tabela users
+
+Dodaj kolumny:
+
+credits integer default 10
+plan text default 'free'
+plan_expiry timestamp
+2️⃣ Backend — sprawdzanie kredytów
+
+👉 dodaj do server.js
+
+// --- SPRAWDZANIE KREDYTÓW ---
+async function checkCredits(userId) {
+  const { data } = await supabase
+    .from("users")
+    .select("*")
+    .eq("id", userId)
+    .single();
+
+  const now = new Date();
+
+  // jeśli PRO i aktywny
+  if (data.plan === "pro" && new Date(data.plan_expiry) > now) {
+    return true;
+  }
+
+  // FREE
+  if (data.credits > 0) return true;
+
+  return false;
+}
+3️⃣ Odejmowanie kredytów
+async function useCredit(userId) {
+  await supabase
+    .from("users")
+    .update({ credits: supabase.raw("credits - 1") })
+    .eq("id", userId);
+}
+4️⃣ Reset kredytów co miesiąc
+async function resetCreditsIfNeeded(userId) {
+  const { data } = await supabase
+    .from("users")
+    .select("*")
+    .eq("id", userId)
+    .single();
+
+  const now = new Date();
+
+  // jeśli PRO wygasło → wraca do FREE
+  if (data.plan === "pro" && new Date(data.plan_expiry) < now) {
+    await supabase.from("users").update({
+      plan: "free",
+      credits: 10
+    }).eq("id", userId);
+  }
+}
+5️⃣ Integracja z generowaniem AI
+
+Zmień /generate:
+
+app.post("/generate", async (req, res) => {
+  const { userId, prompt } = req.body;
+
+  await resetCreditsIfNeeded(userId);
+
+  const allowed = await checkCredits(userId);
+  if (!allowed) return res.json({ error: "Brak kredytów 💸" });
+
+  // AI GENEROWANIE
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: "llama3-70b-8192",
+      messages: [{ role: "user", content: prompt }]
+    })
+  });
+
+  const data = await response.json();
+  const html = data.choices[0].message.content;
+
+  // odejmij kredyt jeśli FREE
+  await useCredit(userId);
+
+  res.json({ html });
+});
+6️⃣ Stripe — PRO (49 zł)
+
+👉 użyj Stripe
+
+Najprostszy sposób (START):
+
+Tworzysz produkt:
+👉 „PRO – 49 zł/miesiąc”
+
+Dostajesz link płatności
+
+Backend — aktywacja PRO
+
+Dodaj endpoint:
+
+app.post("/activate-pro", async (req, res) => {
+  const { userId } = req.body;
+
+  const expiry = new Date();
+  expiry.setMonth(expiry.getMonth() + 1);
+
+  await supabase.from("users").update({
+    plan: "pro",
+    plan_expiry: expiry,
+    credits: 999999
+  }).eq("id", userId);
+
+  res.json({ success: true });
+});
+7️⃣ Frontend — przycisk PRO
+<button onclick="goPro()">💎 Kup PRO 49 zł</button>
+function goPro() {
+  window.location.href = "TWÓJ_LINK_STRIPE";
+}

@@ -96,14 +96,10 @@ router.get("/auth/me", async (req, res) => {
   try {
     const [user] = await db
       .select({
-        id:              usersTable.id,
-        email:           usersTable.email,
-        plan:            usersTable.plan,
-        dailyGenCount:   usersTable.dailyGenCount,
-        monthlyGenCount: usersTable.monthlyGenCount,
-        lastGenDate:     usersTable.lastGenDate,
-        dailyPubCount:   usersTable.dailyPubCount,
-        monthlyPubCount: usersTable.monthlyPubCount,
+        id:      usersTable.id,
+        email:   usersTable.email,
+        plan:    usersTable.plan,
+        credits: usersTable.credits,
       })
       .from(usersTable)
       .where(eq(usersTable.id, req.session.userId));
@@ -117,12 +113,8 @@ router.get("/auth/me", async (req, res) => {
     // Always keep session in sync with DB (plan may have changed externally)
     req.session.plan = user.plan;
 
-    // Reset daily counter in response if the stored date is stale
-    const today = new Date().toISOString().split("T")[0];
-    const lastDate = user.lastGenDate ? String(user.lastGenDate) : null;
-    const dailyGenCount = (!lastDate || lastDate < today) ? 0 : (user.dailyGenCount ?? 0);
-
-    res.json({ ...user, dailyGenCount });
+    const credits = user.plan === "pro" ? 999999 : (user.credits ?? 0);
+    res.json({ ...user, credits });
   } catch (err) {
     console.error("Me error:", String(err));
     res.status(500).json({ error: "Failed to get user" });

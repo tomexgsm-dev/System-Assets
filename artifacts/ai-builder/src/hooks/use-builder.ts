@@ -171,8 +171,9 @@ export function useBuilderGenerate() {
     },
     onError: (error: any) => {
       setProgress({ phase: "error", filesDone: 0, filesTotal: 0 });
-      const isLimit = error?.data?.error === "limit_reached";
-      const isRate = error?.data?.error === "rate_limit";
+      const errCode = error?.data?.error;
+      const isLimit = errCode === "limit_reached" || errCode === "no_credits";
+      const isRate = errCode === "rate_limit";
       if (!isLimit) {
         toast({
           title: isRate ? "Slow down!" : "Generation Failed",

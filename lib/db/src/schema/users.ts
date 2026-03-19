@@ -14,6 +14,7 @@ export const usersTable = pgTable("users", {
   plan: text("plan").notNull().default("free"),
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
+  credits:      integer("credits").notNull().default(10),
   publishCount: integer("publish_count").notNull().default(0),
   dailyGenCount:   integer("daily_gen_count").notNull().default(0),
   monthlyGenCount: integer("monthly_gen_count").notNull().default(0),

@@ -3,7 +3,7 @@ import archiver from "archiver";
 import { db, generationsTable, usersTable } from "@workspace/db";
 import { eq, and, sql } from "drizzle-orm";
 import type { ProjectFile } from "@workspace/db";
-import { checkPublishLimit, incrementPublishCount } from "../utils/limits";
+import { checkCredits, useCredit } from "../utils/limits";
 
 const router: IRouter = Router();
 
@@ -32,20 +32,15 @@ router.post("/deploy", async (req: any, res: Response) => {
   const userId = req.session.userId;
   const plan = req.session.plan ?? "free";
 
-  // ── Free plan publish limit (daily + monthly with auto-reset) ──────────────
-  if (plan === "free") {
-    const limitResult = await checkPublishLimit(userId);
-    if (!limitResult.allowed) {
-      res.status(403).json({
-        error: "publish_limit",
-        message: limitResult.reason,
-        daily: limitResult.daily,
-        dailyLimit: limitResult.dailyLimit,
-        monthly: limitResult.monthly,
-        monthlyLimit: limitResult.monthlyLimit,
-      });
-      return;
-    }
+  // ── Credit check ───────────────────────────────────────────────────────────
+  const creditResult = await checkCredits(userId);
+  if (!creditResult.allowed) {
+    res.status(403).json({
+      error: "no_credits",
+      message: creditResult.reason,
+      credits: creditResult.credits,
+    });
+    return;
   }
 
   // ── Load project files ─────────────────────────────────────────────────────
@@ -110,9 +105,9 @@ router.post("/deploy", async (req: any, res: Response) => {
     const deploy = (await deployRes.json()) as { deploy_ssl_url?: string; ssl_url?: string };
     const liveUrl = deploy.deploy_ssl_url ?? deploy.ssl_url ?? site.ssl_url ?? site.url;
 
-    // 4. Increment publish counters (all users — tracks total publishes)
-    await incrementPublishCount(userId).catch((e: any) =>
-      console.warn("[limits] Failed to increment publish count:", e?.message)
+    // Deduct 1 credit on successful Netlify publish
+    useCredit(userId).catch((e: any) =>
+      console.warn("[credits] Failed to deduct credit (Netlify):", e?.message)
     );
 
     console.log(`[Netlify] deployed gen#${generationId} by user#${userId} → ${liveUrl}`);
@@ -165,19 +160,14 @@ router.post("/deploy-wp", async (req: any, res: Response) => {
 
   const plan = userRow?.plan ?? "free";
 
-  if (plan === "free") {
-    const limitResult = await checkPublishLimit(userId);
-    if (!limitResult.allowed) {
-      res.status(403).json({
-        error: "publish_limit",
-        message: limitResult.reason,
-        daily: limitResult.daily,
-        dailyLimit: limitResult.dailyLimit,
-        monthly: limitResult.monthly,
-        monthlyLimit: limitResult.monthlyLimit,
-      });
-      return;
-    }
+  const wpCreditResult = await checkCredits(userId);
+  if (!wpCreditResult.allowed) {
+    res.status(403).json({
+      error: "no_credits",
+      message: wpCreditResult.reason,
+      credits: wpCreditResult.credits,
+    });
+    return;
   }
 
   // Load generation
@@ -223,9 +213,9 @@ router.post("/deploy-wp", async (req: any, res: Response) => {
     const data = (await wpRes.json()) as { link?: string };
     const liveUrl = data.link ?? base;
 
-    // Increment publish counters
-    await incrementPublishCount(userId).catch((e: any) =>
-      console.warn("[limits] Failed to increment WP publish count:", e?.message)
+    // Deduct 1 credit on successful WordPress publish
+    useCredit(userId).catch((e: any) =>
+      console.warn("[credits] Failed to deduct credit (WP):", e?.message)
     );
 
     console.log(`[WordPress] deployed gen#${generationId} by user#${userId} → ${liveUrl}`);

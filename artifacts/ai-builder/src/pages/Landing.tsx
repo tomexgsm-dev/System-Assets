@@ -81,9 +81,138 @@ function Section({ children, className = "" }: { children: React.ReactNode; clas
   );
 }
 
+const DEMO_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bella Roma — Italian Restaurant</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{--gold:#d4a855;--dark:#0d0905;--card:#1a1208}
+  body{font-family:'Segoe UI',sans-serif;background:var(--dark);color:#fff;overflow-x:hidden}
+  nav{display:flex;align-items:center;justify-content:space-between;padding:20px 60px;background:rgba(0,0,0,.7);position:fixed;top:0;width:100%;z-index:99;backdrop-filter:blur(10px);border-bottom:1px solid rgba(212,168,85,.2)}
+  .logo{font-size:24px;font-weight:800;color:var(--gold);letter-spacing:2px}
+  .nav-links{display:flex;gap:32px}
+  .nav-links a{text-decoration:none;color:rgba(255,255,255,.7);font-size:14px;letter-spacing:1px;text-transform:uppercase;transition:.2s}
+  .nav-links a:hover{color:var(--gold)}
+  .btn{padding:10px 24px;background:var(--gold);color:#000;border:none;border-radius:4px;font-weight:700;font-size:13px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:.2s}
+  .btn:hover{background:#e8be6a;transform:translateY(-1px)}
+  .hero{min-height:100vh;background:linear-gradient(to bottom,rgba(0,0,0,.6),rgba(13,9,5,.95)),url('https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1400') center/cover;display:flex;align-items:center;justify-content:center;text-align:center;padding:0 20px}
+  .hero-tag{display:inline-block;padding:6px 16px;border:1px solid var(--gold);color:var(--gold);font-size:12px;letter-spacing:3px;text-transform:uppercase;margin-bottom:24px;border-radius:2px}
+  .hero h1{font-size:clamp(42px,6vw,80px);font-weight:800;line-height:1.05;margin-bottom:20px}
+  .hero h1 span{color:var(--gold)}
+  .hero p{font-size:18px;color:rgba(255,255,255,.65);max-width:480px;margin:0 auto 36px;line-height:1.7}
+  .hero-btns{display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
+  .btn-outline{padding:12px 28px;border:2px solid var(--gold);color:var(--gold);background:transparent;border-radius:4px;font-weight:700;font-size:13px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:.2s}
+  .btn-outline:hover{background:var(--gold);color:#000}
+  .menu{padding:100px 60px;background:#0a0704}
+  .section-label{text-align:center;color:var(--gold);font-size:12px;letter-spacing:4px;text-transform:uppercase;margin-bottom:12px}
+  .section-title{text-align:center;font-size:clamp(28px,4vw,48px);font-weight:800;margin-bottom:60px}
+  .menu-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:24px;max-width:1100px;margin:0 auto}
+  .dish{background:var(--card);border:1px solid rgba(212,168,85,.1);border-radius:12px;overflow:hidden;transition:.3s}
+  .dish:hover{transform:translateY(-4px);border-color:rgba(212,168,85,.4);box-shadow:0 16px 40px rgba(0,0,0,.4)}
+  .dish-img{height:180px;background:linear-gradient(135deg,#3d1a00,#1a0a00);display:flex;align-items:center;justify-content:center;font-size:56px}
+  .dish-body{padding:20px}
+  .dish-name{font-size:18px;font-weight:700;margin-bottom:6px}
+  .dish-desc{font-size:13px;color:rgba(255,255,255,.5);line-height:1.6;margin-bottom:14px}
+  .dish-footer{display:flex;align-items:center;justify-content:space-between}
+  .price{font-size:20px;font-weight:800;color:var(--gold)}
+  .add-btn{padding:8px 16px;background:rgba(212,168,85,.15);border:1px solid rgba(212,168,85,.3);color:var(--gold);border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;transition:.2s}
+  .add-btn:hover{background:var(--gold);color:#000}
+  .about{padding:100px 60px;background:var(--dark);display:flex;align-items:center;gap:80px;max-width:1100px;margin:0 auto}
+  .about-text{flex:1}
+  .about-text h2{font-size:42px;font-weight:800;margin-bottom:20px}
+  .about-text p{color:rgba(255,255,255,.6);line-height:1.8;margin-bottom:16px;font-size:16px}
+  .stats{display:flex;gap:48px;margin-top:40px}
+  .stat-val{font-size:40px;font-weight:900;color:var(--gold)}
+  .stat-label{font-size:12px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:1px;margin-top:4px}
+  .about-visual{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .av-box{border-radius:12px;background:var(--card);border:1px solid rgba(212,168,85,.1);display:flex;align-items:center;justify-content:center;font-size:48px}
+  .av-box:nth-child(1){height:180px}.av-box:nth-child(2){height:140px;margin-top:40px}.av-box:nth-child(3){height:140px;margin-top:-30px}.av-box:nth-child(4){height:180px}
+  .reserve{padding:100px 60px;background:linear-gradient(135deg,#1a0e00,#0d0905);text-align:center}
+  .reserve h2{font-size:42px;font-weight:800;margin-bottom:12px}
+  .reserve p{color:rgba(255,255,255,.5);margin-bottom:40px;font-size:16px}
+  .form{display:flex;gap:12px;max-width:600px;margin:0 auto;flex-wrap:wrap;justify-content:center}
+  .form input,.form select{flex:1;min-width:160px;padding:14px 18px;background:rgba(255,255,255,.05);border:1px solid rgba(212,168,85,.2);border-radius:8px;color:#fff;font-size:14px;outline:none}
+  .form input:focus,.form select:focus{border-color:var(--gold)}
+  .form select option{background:#1a1208}
+  footer{padding:40px 60px;background:#060402;border-top:1px solid rgba(212,168,85,.1);display:flex;align-items:center;justify-content:space-between}
+  .footer-logo{font-size:20px;font-weight:800;color:var(--gold)}
+  footer p{color:rgba(255,255,255,.3);font-size:13px}
+  @media(max-width:768px){nav{padding:16px 24px}.hero h1{font-size:36px}.menu,.reserve{padding:60px 24px}.about{flex-direction:column;padding:60px 24px}.form{flex-direction:column}.stats{gap:24px}footer{flex-direction:column;gap:12px;text-align:center;padding:32px 24px}}
+</style>
+</head>
+<body>
+<nav>
+  <div class="logo">BELLA ROMA</div>
+  <div class="nav-links">
+    <a href="#">Menu</a><a href="#">About</a><a href="#">Gallery</a><a href="#">Contact</a>
+  </div>
+  <button class="btn">Reserve Table</button>
+</nav>
+<section class="hero">
+  <div>
+    <div class="hero-tag">Since 1987 · Rome, Italy</div>
+    <h1>Authentic Italian<br><span>Cuisine</span> &amp; Passion</h1>
+    <p>Where every dish tells a story. Hand-crafted pasta, wood-fired pizzas, and flavors passed down through generations.</p>
+    <div class="hero-btns">
+      <button class="btn" style="padding:14px 32px;font-size:15px">Explore Menu</button>
+      <button class="btn-outline">Our Story</button>
+    </div>
+  </div>
+</section>
+<section class="menu">
+  <div class="section-label">Chef's Selection</div>
+  <h2 class="section-title">Popular Dishes</h2>
+  <div class="menu-grid">
+    <div class="dish"><div class="dish-img">🍝</div><div class="dish-body"><div class="dish-name">Carbonara Classica</div><div class="dish-desc">Creamy egg sauce, guanciale, aged Pecorino Romano, freshly ground black pepper.</div><div class="dish-footer"><span class="price">$22</span><button class="add-btn">Add to order</button></div></div></div>
+    <div class="dish"><div class="dish-img">🍕</div><div class="dish-body"><div class="dish-name">Margherita DOC</div><div class="dish-desc">San Marzano tomatoes, buffalo mozzarella, fresh basil, extra virgin olive oil.</div><div class="dish-footer"><span class="price">$18</span><button class="add-btn">Add to order</button></div></div></div>
+    <div class="dish"><div class="dish-img">🥩</div><div class="dish-body"><div class="dish-name">Ossobuco Milanese</div><div class="dish-desc">Slow-braised veal shank with gremolata on a bed of golden saffron risotto.</div><div class="dish-footer"><span class="price">$38</span><button class="add-btn">Add to order</button></div></div></div>
+    <div class="dish"><div class="dish-img">🦞</div><div class="dish-body"><div class="dish-name">Linguine al'Aragosta</div><div class="dish-desc">Fresh Boston lobster, cherry tomatoes, garlic, white wine, fresh parsley.</div><div class="dish-footer"><span class="price">$52</span><button class="add-btn">Add to order</button></div></div></div>
+    <div class="dish"><div class="dish-img">🍮</div><div class="dish-body"><div class="dish-name">Tiramisu della Nonna</div><div class="dish-desc">Espresso-soaked ladyfingers, mascarpone cream, dark cocoa — grandma's recipe.</div><div class="dish-footer"><span class="price">$14</span><button class="add-btn">Add to order</button></div></div></div>
+    <div class="dish"><div class="dish-img">🍷</div><div class="dish-body"><div class="dish-name">Barolo Chinato</div><div class="dish-desc">Piedmontese digestif, aged 3 years. The perfect ending to any great meal.</div><div class="dish-footer"><span class="price">$16</span><button class="add-btn">Add to order</button></div></div></div>
+  </div>
+</section>
+<div style="padding:100px 60px;background:#0a0704">
+  <div class="about">
+    <div class="about-text">
+      <div class="section-label" style="text-align:left">Our Story</div>
+      <h2>Family cooking<br>since 1987</h2>
+      <p>Founded by Chef Marco Romano in the heart of Rome, Bella Roma has been a beacon of authentic Italian cuisine for over three decades. Every recipe is a family heirloom.</p>
+      <p>We source our ingredients directly from small farms in Tuscany, Sicily, and Lombardy — because great food starts with great ingredients.</p>
+      <div class="stats">
+        <div><div class="stat-val">37</div><div class="stat-label">Years open</div></div>
+        <div><div class="stat-val">200+</div><div class="stat-label">Recipes</div></div>
+        <div><div class="stat-val">4.9★</div><div class="stat-label">Rating</div></div>
+      </div>
+    </div>
+    <div class="about-visual">
+      <div class="av-box">🧑‍🍳</div><div class="av-box">🫒</div><div class="av-box">🌿</div><div class="av-box">🍷</div>
+    </div>
+  </div>
+</div>
+<section class="reserve">
+  <div class="section-label">Book a Table</div>
+  <h2>Reserve Your Evening</h2>
+  <p>Join us for an unforgettable dining experience. Available Tuesday through Sunday.</p>
+  <div class="form">
+    <input type="text" placeholder="Your name">
+    <input type="date">
+    <select><option>2 guests</option><option>3 guests</option><option>4 guests</option><option>6+ guests</option></select>
+    <button class="btn" style="padding:14px 24px;white-space:nowrap">Book now →</button>
+  </div>
+</section>
+<footer>
+  <div class="footer-logo">BELLA ROMA</div>
+  <p>© 2024 Bella Roma. 12 Via Condotti, Rome. +39 06 1234 5678</p>
+</footer>
+</body>
+</html>`;
+
 export default function Landing() {
   const [, navigate] = useLocation();
   const { isAuthenticated, isLoading } = useAuth();
+  const [showDemo, setShowDemo] = useState(false);
 
   useEffect(() => {
     document.title = "Nexus Builder — AI Website Builder";
@@ -93,6 +222,13 @@ export default function Landing() {
   useEffect(() => {
     if (!isLoading && isAuthenticated) navigate("/app");
   }, [isLoading, isAuthenticated, navigate]);
+
+  // Close demo on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setShowDemo(false); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#080810] text-white overflow-x-hidden">
@@ -181,6 +317,13 @@ export default function Landing() {
             className="px-7 py-4 rounded-2xl font-semibold text-white/70 border border-white/10 hover:border-white/30 hover:text-white text-base transition-all"
           >
             Sign in
+          </button>
+          <button
+            onClick={() => setShowDemo(true)}
+            className="flex items-center gap-2 px-7 py-4 rounded-2xl font-semibold text-white/60 hover:text-white text-base transition-all"
+          >
+            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+            See live demo
           </button>
         </motion.div>
 
@@ -517,6 +660,81 @@ export default function Landing() {
           <p className="text-xs text-white/20">© {new Date().getFullYear()} Nexus Builder</p>
         </div>
       </footer>
+
+      {/* ── Demo modal ── */}
+      <AnimatePresence>
+        {showDemo && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center p-4 md:p-8"
+            onClick={(e) => { if (e.target === e.currentTarget) setShowDemo(false); }}
+          >
+            {/* Backdrop */}
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-md" />
+
+            {/* Modal */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 16 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+              className="relative w-full max-w-5xl bg-[#0f0f1a] rounded-2xl border border-white/10 shadow-2xl overflow-hidden flex flex-col"
+              style={{ maxHeight: "90vh" }}
+            >
+              {/* Modal header */}
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/10 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="flex gap-1.5">
+                    <div className="w-3 h-3 rounded-full bg-red-500/70" />
+                    <div className="w-3 h-3 rounded-full bg-yellow-500/70" />
+                    <div className="w-3 h-3 rounded-full bg-green-500/70" />
+                  </div>
+                  <span className="text-xs text-white/40 font-mono ml-1">bella-roma-restaurant.netlify.app</span>
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-500/15 border border-green-500/30 text-green-400 text-[10px] font-semibold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                    AI Generated
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => navigate("/register")}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white text-xs font-bold hover:opacity-90 transition-opacity"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    Build yours free
+                  </button>
+                  <button
+                    onClick={() => setShowDemo(false)}
+                    className="w-7 h-7 rounded-lg flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-all text-lg leading-none"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+
+              {/* Label bar */}
+              <div className="shrink-0 px-5 py-2.5 bg-violet-600/10 border-b border-violet-500/20 flex items-center gap-2">
+                <Sparkles className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+                <p className="text-xs text-violet-300">
+                  This website was generated from the prompt: <span className="font-semibold text-white">"Italian restaurant with menu, about section and reservation form"</span>
+                </p>
+              </div>
+
+              {/* iframe */}
+              <iframe
+                srcDoc={DEMO_HTML}
+                title="Demo — Bella Roma Restaurant"
+                className="w-full flex-1 bg-white"
+                style={{ minHeight: 500 }}
+                sandbox="allow-scripts allow-same-origin"
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

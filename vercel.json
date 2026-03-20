@@ -1,10 +1,7 @@
 {
-  "build": {
-    "env": {
-      "NODE_ENV": "production"
-    }
-  },
+  "buildCommand": "pnpm run build",
+  "outputDirectory": "dist/public",
   "routes": [
-    { "src": "/(.*)", "dest": "/dist/public/index.html" }
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }

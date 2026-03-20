@@ -1,0 +1,11 @@
+{
+  "build": {
+    "env": {
+      "NODE_ENV": "production"
+    },
+    "outputDirectory": "dist/public"
+  },
+  "routes": [
+    { "src": "/(.*)", "dest": "/artifacts/ai-builder/dist/public/index.html" }
+  ]
+}

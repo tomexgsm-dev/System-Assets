@@ -5,7 +5,7 @@ import {
   ExternalLink, Download, FileCode2, Layers, Code2, Eye, Globe,
   Rocket, X, Link, Crown, Blocks, MessageSquare, Wrench, Send,
   ChevronDown, ChevronUp, Bot, TrendingUp, Search, Lightbulb,
-  GripVertical, Plus, Trash2, PanelTop,
+  GripVertical, Plus, Trash2, PanelTop, Github, GitBranch,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { CodeEditor } from "@/components/CodeEditor";
@@ -140,6 +140,15 @@ export function BrowserPreview({
   const [showSections, setShowSections] = useState(false);
   const [dragSectionIdx, setDragSectionIdx] = useState<number | null>(null);
   const [dragOverSectionIdx, setDragOverSectionIdx] = useState<number | null>(null);
+
+  // ── GitHub push state ──
+  const [showGithubModal, setShowGithubModal] = useState(false);
+  const [githubState, setGithubState] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [githubPath, setGithubPath] = useState("index.html");
+  const [githubCommitMsg, setGithubCommitMsg] = useState("Update from Nexus Builder");
+  const [githubFileUrl, setGithubFileUrl] = useState<string | null>(null);
+  const [githubCommitUrl, setGithubCommitUrl] = useState<string | null>(null);
+  const [githubError, setGithubError] = useState<string | null>(null);
 
   const { toast } = useToast();
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -494,6 +503,45 @@ export function BrowserPreview({
     }
   };
 
+  // ── GitHub push handler ──
+  const handleGithubPush = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentHtml || githubState === "loading") return;
+    setGithubState("loading");
+    setGithubFileUrl(null);
+    setGithubCommitUrl(null);
+    setGithubError(null);
+    try {
+      const res = await fetch(`${BASE}/api/github/push`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          path: githubPath.trim() || "index.html",
+          content: currentHtml,
+          commitMessage: githubCommitMsg.trim() || "Update from Nexus Builder",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (data.error === "github_not_configured") {
+          setGithubError("__not_configured__");
+        } else {
+          setGithubError(data.message ?? data.error ?? "Push failed");
+        }
+        setGithubState("error");
+        return;
+      }
+      setGithubFileUrl(data.fileUrl ?? null);
+      setGithubCommitUrl(data.commitUrl ?? null);
+      setGithubState("done");
+      toast({ title: "Pushed to GitHub!", description: `File ${githubPath} committed.` });
+    } catch (err: any) {
+      setGithubError(err?.message ?? "Unexpected error");
+      setGithubState("error");
+    }
+  };
+
   const phaseLabel   = PHASE_LABELS[progress.phase] ?? "Working...";
   const showProgress = progress.phase === "building" && progress.filesTotal > 0;
   const hasProject   = !!html && !!currentId && !isLoading;
@@ -624,6 +672,15 @@ export function BrowserPreview({
               >
                 <Blocks className="w-4 h-4" />
                 WordPress
+              </button>
+            )}
+            {currentId && (
+              <button
+                onClick={() => { setShowGithubModal(true); setGithubState("idle"); setGithubFileUrl(null); setGithubCommitUrl(null); setGithubError(null); }}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-500/10 hover:bg-zinc-500/20 text-zinc-400 dark:text-zinc-300 text-sm font-medium transition-colors border border-zinc-500/20"
+              >
+                <Github className="w-4 h-4" />
+                GitHub
               </button>
             )}
             {currentId && (
@@ -1548,6 +1605,172 @@ export function BrowserPreview({
                     Try again
                   </button>
                 </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── GitHub Push Modal ── */}
+      <AnimatePresence>
+        {showGithubModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            onClick={(e) => { if (e.target === e.currentTarget && githubState !== "loading") setShowGithubModal(false); }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="bg-card border border-border/60 rounded-2xl shadow-2xl w-full max-w-md p-6 relative"
+            >
+              <button
+                onClick={() => setShowGithubModal(false)}
+                disabled={githubState === "loading"}
+                className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              {/* Header */}
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-10 h-10 rounded-xl bg-zinc-500/10 border border-zinc-500/20 flex items-center justify-center">
+                  <Github className="w-5 h-5 text-zinc-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-foreground">Push to GitHub</h3>
+                  <p className="text-xs text-muted-foreground">Commit your page to a GitHub repository</p>
+                </div>
+              </div>
+
+              {/* Not configured */}
+              {githubState === "error" && githubError === "__not_configured__" ? (
+                <div className="flex flex-col gap-4">
+                  <div className="rounded-xl bg-orange-500/10 border border-orange-500/20 p-4 text-sm text-orange-300">
+                    <p className="font-semibold mb-2">GitHub secrets not configured</p>
+                    <p className="text-xs text-muted-foreground mb-3">Add these two secrets in the Replit Secrets panel to enable GitHub integration:</p>
+                    <div className="flex flex-col gap-1.5">
+                      <div className="flex items-center gap-2 bg-secondary/60 rounded-lg px-3 py-2 font-mono text-xs">
+                        <code className="text-amber-300">GITHUB_TOKEN</code>
+                        <span className="text-muted-foreground">— Personal Access Token with <em>repo</em> scope</span>
+                      </div>
+                      <div className="flex items-center gap-2 bg-secondary/60 rounded-lg px-3 py-2 font-mono text-xs">
+                        <code className="text-amber-300">GITHUB_REPO</code>
+                        <span className="text-muted-foreground">— e.g. <em>username/my-website</em></span>
+                      </div>
+                    </div>
+                  </div>
+                  <a
+                    href="https://github.com/settings/tokens/new?scopes=repo"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 text-sm text-primary font-semibold hover:underline"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    Create a GitHub Personal Access Token
+                  </a>
+                </div>
+              ) : githubState === "done" ? (
+                <div className="flex flex-col items-center gap-4 py-2 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-green-500/10 border border-green-500/30 flex items-center justify-center">
+                    <Check className="w-8 h-8 text-green-500" />
+                  </div>
+                  <div>
+                    <h4 className="text-lg font-bold text-foreground mb-1">Pushed successfully! 🚀</h4>
+                    <p className="text-sm text-muted-foreground mb-3">
+                      <code className="bg-secondary px-1.5 py-0.5 rounded text-xs font-mono">{githubPath}</code> has been committed to your repository.
+                    </p>
+                    <div className="flex flex-col gap-2">
+                      {githubFileUrl && (
+                        <a
+                          href={githubFileUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-semibold transition-colors"
+                        >
+                          <Github className="w-4 h-4" />
+                          View File on GitHub
+                        </a>
+                      )}
+                      {githubCommitUrl && (
+                        <a
+                          href={githubCommitUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center justify-center gap-2 text-sm text-primary font-semibold hover:underline"
+                        >
+                          <GitBranch className="w-4 h-4" />
+                          View Commit
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleGithubPush} className="flex flex-col gap-4">
+                  {githubState === "error" && githubError && githubError !== "__not_configured__" && (
+                    <div className="rounded-xl bg-red-500/10 border border-red-500/20 p-3 text-xs text-red-400">
+                      ❌ {githubError}
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">File path in repository</label>
+                    <input
+                      type="text"
+                      value={githubPath}
+                      onChange={(e) => setGithubPath(e.target.value)}
+                      placeholder="index.html"
+                      disabled={githubState === "loading"}
+                      className="w-full bg-secondary/60 border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 disabled:opacity-50 font-mono"
+                    />
+                    <p className="text-[11px] text-muted-foreground/60">e.g. <code>index.html</code>, <code>pages/about.html</code></p>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Commit message</label>
+                    <input
+                      type="text"
+                      value={githubCommitMsg}
+                      onChange={(e) => setGithubCommitMsg(e.target.value)}
+                      placeholder="Update from Nexus Builder"
+                      disabled={githubState === "loading"}
+                      className="w-full bg-secondary/60 border border-border/50 rounded-xl px-3 py-2.5 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 disabled:opacity-50"
+                    />
+                  </div>
+
+                  <div className="rounded-xl bg-secondary/40 border border-border/30 p-3 text-xs text-muted-foreground">
+                    <p className="font-medium text-foreground mb-1 flex items-center gap-1.5">
+                      <Github className="w-3.5 h-3.5" />
+                      Repository: <code className="font-mono text-primary ml-1">{typeof process !== "undefined" ? "configured via secrets" : "GITHUB_REPO"}</code>
+                    </p>
+                    <p>The current page HTML will be committed. If the file already exists, it will be updated.</p>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={githubState === "loading" || !githubPath.trim()}
+                    className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-600/50 text-white text-sm font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                  >
+                    {githubState === "loading" ? (
+                      <>
+                        <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Pushing to GitHub…
+                      </>
+                    ) : (
+                      <>
+                        <Github className="w-4 h-4" />
+                        Push to GitHub
+                      </>
+                    )}
+                  </button>
+                </form>
               )}
             </motion.div>
           </motion.div>

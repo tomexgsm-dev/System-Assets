@@ -8,6 +8,7 @@ import styleRouter from "./style";
 import chatRouter from "./chat";
 import autoBusinessRouter from "./auto-business";
 import seoRouter from "./seo";
+import githubRouter from "./github";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(styleRouter);
 router.use(chatRouter);
 router.use(autoBusinessRouter);
 router.use(seoRouter);
+router.use(githubRouter);
 
 export default router;

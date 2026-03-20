@@ -6,6 +6,6 @@
     "outputDirectory": "dist/public"
   },
   "routes": [
-    { "src": "/(.*)", "dest": "/artifacts/ai-builder/dist/public/index.html" }
+    { "src": "/(.*)", "dest": "/dist/public/index.html" }
   ]
 }

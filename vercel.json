@@ -1,7 +1,8 @@
 {
   "buildCommand": "pnpm run build",
   "outputDirectory": "dist/public",
+  "installCommand": "pnpm install", 
   "routes": [
-    { "src": "/(.*)", "dest": "/index.html" }
+    { "src": "/(.*)", "dest": "/artifacts/ai-builder/dist/public/index.html" }
   ]
 }

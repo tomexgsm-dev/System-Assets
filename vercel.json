@@ -3,7 +3,6 @@
     "env": {
       "NODE_ENV": "production"
     }
-    // Usunięto "outputDirectory": "dist/public" z tego miejsca
   },
   "routes": [
     { "src": "/(.*)", "dest": "/dist/public/index.html" }

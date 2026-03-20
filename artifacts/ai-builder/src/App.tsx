@@ -2,6 +2,7 @@ import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import Splash from "./pages/Splash";
 import Landing from "./pages/Landing";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
@@ -21,7 +22,8 @@ const queryClient = new QueryClient({
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Landing} />
+      <Route path="/" component={Splash} />
+      <Route path="/landing" component={Landing} />
       <Route path="/app" component={Home} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />

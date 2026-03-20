@@ -37,9 +37,20 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
-        </WouterRouter>
+
+        {/* 🔥 GLOBAL SCROLL FIX */}
+        <div
+          style={{
+            height: "100vh",
+            overflowY: "auto",
+            overflowX: "hidden"
+          }}
+        >
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <Router />
+          </WouterRouter>
+        </div>
+
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>

@@ -2,8 +2,8 @@
   "build": {
     "env": {
       "NODE_ENV": "production"
-    },
-    "outputDirectory": "dist/public"
+    }
+    // Usunięto "outputDirectory": "dist/public" z tego miejsca
   },
   "routes": [
     { "src": "/(.*)", "dest": "/dist/public/index.html" }
